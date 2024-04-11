@@ -14,8 +14,6 @@ cycle_interactions = {
 }
 # todo: generalize cycle interactions to non-binary labels?
 
-print(cycle_interactions)
-
 # Create empty model
 osac_lp = Model(sense=MAXIMIZE, solver_name=CBC)
 
