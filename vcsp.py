@@ -8,7 +8,6 @@ from copy import deepcopy
 import inspect
 import itertools as it
 import math
-import unittest
 
 import mip
 
@@ -175,17 +174,3 @@ class VCSPInstance:
         if new_costs is None:
             return None
         return VCSPInstance(self.vars, self.doms, new_costs)
-
-
-class TestVCSPCosts(unittest.TestCase):
-    # todo: implement
-    pass
-
-
-class TestVCSPInstance(unittest.TestCase):
-    # todo: implement
-    pass
-
-
-if __name__ == '__main__':
-    unittest.main()
