@@ -63,4 +63,4 @@ class FrustratedCycleCompleteSplit(VCSPInstance):
         super().__init__(sfc.vars, doms, costs)
 
 
-# todo:
+# todo: frustrated cycle plus variables with positive unary potentials
