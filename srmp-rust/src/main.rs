@@ -10,7 +10,9 @@ mod csp {
 }
 
 mod cfn {
+    pub mod plan;
     pub mod cost_function_network;
+    pub mod solver;
 }
 
 use csp::binary_csp::BinaryCSP;

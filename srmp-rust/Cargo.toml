@@ -5,3 +5,7 @@ edition = "2021"
 
 [dependencies]
 queues = "1.0.2"
+hypergraph = "2.1.2"
+petgraph = "0.6.5"
+bit-vec = "0.6.3"
+ndarray = "0.15.6"
