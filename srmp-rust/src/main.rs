@@ -10,13 +10,16 @@ mod csp {
 }
 
 mod cfn {
-    pub mod plan;
     pub mod cost_function_network;
+    pub mod plan;
     pub mod solver;
 }
 
-use csp::binary_csp::BinaryCSP;
+use std::fs::OpenOptions;
+
+use cfn::cost_function_network::*;
 use csp::ac3::AC3;
+use csp::binary_csp::BinaryCSP;
 
 fn example_1() {
     // Example: frustrated cycle
@@ -76,9 +79,22 @@ fn example_4() {
 // todo: test preventing pushes to queue because of uniqueness
 
 fn main() {
-    // todo: convert examples into tests
-    example_1();
-    example_2();
-    example_3();
-    example_4();
+    // // todo: convert into tests
+    // example_1();
+    // example_2();
+    // example_3();
+    // example_4();
+
+    let input_file = OpenOptions::new()
+        .read(true)
+        .open("problem_instances/grid4x4.UAI.LG")
+        .unwrap();
+    let cfn = CFNPetGraph::read_from_uai(input_file);
+
+    let output_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open("problem_instances/output.uai")
+        .unwrap();
+    cfn.write_to_uai(output_file).unwrap();
 }

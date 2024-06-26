@@ -41,7 +41,7 @@ impl<T> JaggedTable<T> {
     }
 
     pub fn inner_len(&self, index: usize) -> usize {
-        let _ = self.internal_index([index, 0]);  // check bounds
+        let _ = self.internal_index([index, 0]); // check bounds
         self.index_shift[index + 1] - self.index_shift[index]
     }
 }
@@ -82,10 +82,10 @@ impl<T> IndexMut<[usize; 2]> for JaggedTable<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
-    #[test]
-    fn new() {
-        // todo: add tests
-    }
+    // #[test]
+    // fn new() {
+    //     // todo: add tests
+    // }
 }

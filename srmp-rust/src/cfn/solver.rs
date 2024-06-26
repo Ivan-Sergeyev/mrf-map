@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::cfn::cost_function_network::*;
 
 pub struct SolverOptions {
@@ -9,28 +11,36 @@ pub struct SolverOptions {
     verbose: bool,
 }
 
-trait Solver<CFN> where CFN: CostFunctionNetwork {
+trait Solver<CFN>
+where
+    CFN: CostFunctionNetwork,
+{
     fn init(options: SolverOptions, cfn: CFN) -> Self;
     fn solve(self) -> f64;
-    fn get_solution(&self) -> &Vec<f64>;
+    fn get_solution(&self) -> &Vec<usize>;
 }
 
-struct SRMP<CFN> where CFN: CostFunctionNetwork {
+struct SRMP<CFN>
+where
+    CFN: CostFunctionNetwork,
+{
     options: SolverOptions,
     cfn: CFN,
-    solution: Vec<f64>,
+    solution: Vec<usize>,
     lower_bound: f64,
-
 }
 
-impl<CFN> Solver<CFN> for SRMP<CFN> where CFN: CostFunctionNetwork {
+impl<CFN> Solver<CFN> for SRMP<CFN>
+where
+    CFN: CostFunctionNetwork,
+{
     fn init(options: SolverOptions, cfn: CFN) -> Self {
         let num_variables = cfn.num_variables();
         todo!();
         SRMP {
             options: options,
             cfn: cfn,
-            solution: vec![0.; num_variables],
+            solution: vec![0; num_variables],
             lower_bound: 0.,
         }
 
@@ -53,7 +63,7 @@ impl<CFN> Solver<CFN> for SRMP<CFN> where CFN: CostFunctionNetwork {
         // update messages, recompute potentials, s
     }
 
-    fn get_solution(&self) -> &Vec<f64> {
+    fn get_solution(&self) -> &Vec<usize> {
         &self.solution
     }
 }

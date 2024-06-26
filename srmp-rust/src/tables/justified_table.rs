@@ -38,11 +38,15 @@ impl<T> JustifiedTable<T> {
     }
 
     pub fn len(&self) -> usize {
-        if self.index_shift != 0 { self.data.len() / self.index_shift } else { 0 }
+        if self.index_shift != 0 {
+            self.data.len() / self.index_shift
+        } else {
+            0
+        }
     }
 
     pub fn inner_len(&self, index: usize) -> usize {
-        let _ = self.internal_index([index, 0]);  // check bounds
+        let _ = self.internal_index([index, 0]); // check bounds
         self.index_shift
     }
 }
@@ -84,10 +88,10 @@ impl<T> IndexMut<[usize; 2]> for JustifiedTable<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
-    #[test]
-    fn new() {
-        // todo: add tests
-    }
+    // #[test]
+    // fn new() {
+    //     // todo: add tests
+    // }
 }

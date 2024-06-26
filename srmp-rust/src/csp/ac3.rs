@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use std::collections::VecDeque;
 use crate::csp::binary_csp::BinaryCSP;
+use std::collections::VecDeque;
 
 /// Supporting data structures and implementation of the AC-3 algorithm.
 /// todo: upgrade to ensure uniqueness of elements in queue
@@ -23,9 +23,12 @@ impl AC3 {
     fn init(&mut self, csp: &BinaryCSP) -> Option<usize> {
         self.active_domains = Vec::with_capacity(csp.num_variables());
         for var in csp.var_range() {
-            let active_domain: Vec<usize> = csp.domain_range(var).filter(|&label| csp.is_unary_satisfied(var, label)).collect();
+            let active_domain: Vec<usize> = csp
+                .domain_range(var)
+                .filter(|&label| csp.is_unary_satisfied(var, label))
+                .collect();
             if active_domain.is_empty() {
-                return Some(var);  // preemptive domain wipe out at var
+                return Some(var); // preemptive domain wipe out at var
             }
             self.active_domains.push(active_domain);
         }
@@ -38,7 +41,7 @@ impl AC3 {
             }
         }
 
-        None  // initialization successful
+        None // initialization successful
     }
 
     fn revise(&mut self, csp: &BinaryCSP, var_x: usize, var_y: usize) -> bool {
@@ -69,7 +72,7 @@ impl AC3 {
 
     pub fn run_algorithm(&mut self, csp: &BinaryCSP) -> Option<usize> {
         if let Some(var) = self.init(csp) {
-            return Some(var);  // preemptive domain wipe out at var
+            return Some(var); // preemptive domain wipe out at var
         }
 
         loop {
@@ -82,7 +85,7 @@ impl AC3 {
             }
 
             if self.active_domains[var_x].is_empty() {
-                return Some(var_x);  // domain wipe out at var_x
+                return Some(var_x); // domain wipe out at var_x
             }
 
             for var_z in csp.var_range() {

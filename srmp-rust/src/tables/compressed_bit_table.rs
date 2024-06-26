@@ -46,7 +46,10 @@ impl CompressedBitTable {
 
     fn array_bit_index(&self, index: [usize; 2]) -> (usize, usize) {
         let internal_index = self.internal_index(index);
-        (internal_index / compressed_storage_size(), internal_index % compressed_storage_size())
+        (
+            internal_index / compressed_storage_size(),
+            internal_index % compressed_storage_size(),
+        )
     }
 
     pub fn get(&self, index: [usize; 2]) -> u8 {
@@ -60,11 +63,15 @@ impl CompressedBitTable {
     }
 
     pub fn len(&self) -> usize {
-        if self.index_shift != 0 { self.data.len() / self.index_shift } else { 0 }
+        if self.index_shift != 0 {
+            self.data.len() / self.index_shift
+        } else {
+            0
+        }
     }
 
     pub fn inner_len(&self, index: usize) -> usize {
-        let _ = self.internal_index([index, 0]);  // check bounds
+        let _ = self.internal_index([index, 0]); // check bounds
         self.index_shift
     }
 }
@@ -112,10 +119,16 @@ impl From<Vec<Vec<u8>>> for CompressedBitTable {
 
             // flatten and extend value if len is not aligned
             let mut value: Vec<u8> = value.into_iter().flatten().collect();
-            value.extend(vec![0; diff_to_next_multiple(len, compressed_storage_size())]);
+            value.extend(vec![
+                0;
+                diff_to_next_multiple(len, compressed_storage_size())
+            ]);
 
             // compress bit data
-            let data = value.chunks_exact(compressed_storage_size()).map(|chunk| compress_chunk(chunk)).collect();
+            let data = value
+                .chunks_exact(compressed_storage_size())
+                .map(|chunk| compress_chunk(chunk))
+                .collect();
 
             // create table
             CompressedBitTable {
@@ -132,10 +145,10 @@ impl From<Vec<Vec<u8>>> for CompressedBitTable {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
-    #[test]
-    fn new() {
-        // todo: add tests
-    }
+    // #[test]
+    // fn new() {
+    //     // todo: add tests
+    // }
 }

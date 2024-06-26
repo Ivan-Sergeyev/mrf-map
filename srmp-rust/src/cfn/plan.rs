@@ -24,7 +24,6 @@ trait CostFunctionNetwork {
 // with pub trait CostFunctionNetwork:
 // Box<dyn CostFunctionNetwork> cfn;
 
-
 trait VariableOrdering {
     // fn generate_ordering(&self) -> impl Iter;  // note: original implementation saves ordering in `nodes[k].solution`
 }
@@ -35,7 +34,6 @@ trait VariableOrdering {
 //     MinimalCostFirst,
 // }
 // fn generate_ordering(&self, ordering: VariableOrderings) -> impl Iterator; // outer or member function
-
 
 pub struct SolverOptions {
     max_iterations: usize,
@@ -57,8 +55,10 @@ pub struct SolverOptions {
 // [example 1](https://rust-lang-nursery.github.io/rust-cookbook/development_tools/debugging/log.html#log-a-debug-message-to-the-console)
 // [example 2](https://samkeen.dev/logging-in-rust-a-beginners-guide)
 
-
-trait Solver<T> where T: CostFunctionNetwork {
+trait Solver<T>
+where
+    T: CostFunctionNetwork,
+{
     fn new(options: SolverOptions) -> Self;
     // fn consume_cfn(self, cfn: T) -> Self;
     fn solve(self) -> f64;
@@ -71,16 +71,16 @@ trait Solver<T> where T: CostFunctionNetwork {
 // struct Solver1<T> where T: CostFunctionNetwork { internal_cfn: T }
 // impl<T> Solver<T> for Solver1<T> where T: CostFunctionNetwork {}
 
-
 // solvers to implement: SRMP, MPLP, MPLP_BW, CMP
 // // how to implement:
 // enum SolverOptionTypes {SRMP, MPLP, MPLP_BW, CMP, TRWS(f64)}
 // another idea: impl Solver<Solver1> for CFN where CFN: CostFunctionNetwork { ... }
 
-
 trait ConstructRelaxation<RelaxationMethod> {
-    fn construct_relaxation(self) where Self: CostFunctionNetwork;
-    fn save_uai(&self);  // todo: args; maybe move to CostFunctionNetwork
+    fn construct_relaxation(self)
+    where
+        Self: CostFunctionNetwork;
+    fn save_uai(&self); // todo: args; maybe move to CostFunctionNetwork
     fn print_stats(&self);
 }
 
@@ -88,7 +88,6 @@ trait ConstructRelaxation<RelaxationMethod> {
 // // how to implement:
 // struct SetMinimalEdges { ... }
 // impl ConstructRelaxation<SetMinimalEdges> for CFN { ... }  // note: specific implementation of CostFunctionNetwork
-
 
 struct CostFunction {
     arity: usize,

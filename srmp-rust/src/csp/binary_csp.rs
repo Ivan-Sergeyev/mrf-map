@@ -23,16 +23,23 @@ pub struct BinaryCSP {
 }
 
 fn empty_binary_constraints(num_variables: usize) -> JaggedTable<Option<CompressedBitTable>> {
-    (0..num_variables).map(
-        |var| std::iter::repeat_with(|| None).take(num_variables - var - 1).collect::<Vec<_>>()
-    ).collect::<Vec<Vec<_>>>().into()
+    (0..num_variables)
+        .map(|var| {
+            std::iter::repeat_with(|| None)
+                .take(num_variables - var - 1)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<Vec<_>>>()
+        .into()
 }
 
 impl BinaryCSP {
     pub fn new(domain_sizes: &Vec<usize>) -> Self {
         // initializes binary CSP with consistent unary constraints and no binary constraints
         let num_variables = domain_sizes.len();
-        let unary_constraints = (0..num_variables).map(|var| vec![1; domain_sizes[var]]).collect::<Vec<Vec<u8>>>();
+        let unary_constraints = (0..num_variables)
+            .map(|var| vec![1; domain_sizes[var]])
+            .collect::<Vec<Vec<u8>>>();
         BinaryCSP {
             unary_constraints: unary_constraints.into(),
             binary_constraints: empty_binary_constraints(num_variables),
@@ -84,7 +91,12 @@ impl BinaryCSP {
         (var_x, var_y - var_x - 1)
     }
 
-    pub fn add_binary_constraint(&mut self, var_x: usize, var_y: usize, binary_constraint: Vec<Vec<u8>>) -> &mut Self {
+    pub fn add_binary_constraint(
+        &mut self,
+        var_x: usize,
+        var_y: usize,
+        binary_constraint: Vec<Vec<u8>>,
+    ) -> &mut Self {
         let (var_x, var_y) = self.binary_constraint_index(var_x, var_y);
         // todo: assert that input (binary_constraint) has correct shape
         // todo: assert that no previous binary constraint exists
@@ -98,9 +110,16 @@ impl BinaryCSP {
         self.unary_constraints.get([var, label]) == 1
     }
 
-    pub fn is_binary_satisfied(&self, var_x: usize, var_y: usize, label_x: usize, label_y: usize) -> bool {
+    pub fn is_binary_satisfied(
+        &self,
+        var_x: usize,
+        var_y: usize,
+        label_x: usize,
+        label_y: usize,
+    ) -> bool {
         let (var_x, var_y) = self.binary_constraint_index(var_x, var_y);
-        self.binary_constraints[[var_x, var_y]].as_ref()
+        self.binary_constraints[[var_x, var_y]]
+            .as_ref()
             .map_or_else(|| true, |table| table.get([label_x, label_y]) == 1)
     }
 
@@ -112,10 +131,10 @@ impl BinaryCSP {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
-    #[test]
-    fn new() {
-        // todo: add tests
-    }
+    // #[test]
+    // fn new() {
+    //     // todo: add tests
+    // }
 }
