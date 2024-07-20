@@ -4,15 +4,16 @@
 
 ## Implemented features
 
+[v] CFNs
+    - support for unary, binary, and higher-order terms
+    - implementation stores all terms and an undirected hypergraph
+    - can save and load in UAI format
+[v] Relaxations
+    - "Minimal edges" (aka factor graph)
 [v] Binary CSPs
     - constraints are stored in a custom compressed bool tables (replaces `Vec<Vec<bool>>`, stores data linearly, stores bools in bits instead of bytes)
     - binary constraints are stored in a custom jagged table (replaces `Vec<Vec<...>>`, stores data linearly, represents non-existent constraints as `Option::None`)
     - arc consistency propagation via AC3
-[v] CFNs
-    - currently only unary and pairwise terms are supported
-    - implementation stores `Vec`'s of unary and pairwise terms and an undirected graph (`petgraph` module)
-    - can generate
-    - can save and load in UAI format
 [ ] Algorithms
     - options struct, interface for algorithms via a trait
 
@@ -21,7 +22,6 @@
 [ ] implement remaining features from SRMP:
     - save/load in UAI.LG format
     - algorithms (already have outline for SRMP!)
-    - general factors (arbitrary arity)
     - optimized factor types (e.g., Potts)
     - etc.
 [ ] variable splitting for CFNs and/or CPSs
@@ -33,7 +33,9 @@
     - authors of toulbar
     - Kappes et al. 2015
     - etc.
-[ ] add logging, docs, and tests
+[ ] add logging
+[ ] add tests
+[ ] add docs
 
 ## Optional features
 

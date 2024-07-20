@@ -8,7 +8,6 @@ pub struct SolverOptions {
     eps: f64,
     extract_solution_period: usize,
     print_times: bool,
-    verbose: bool,
 }
 
 trait Solver<CFN>
@@ -35,8 +34,10 @@ where
     CFN: CostFunctionNetwork,
 {
     fn init(options: SolverOptions, cfn: CFN) -> Self {
-        let num_variables = cfn.num_variables();
         todo!();
+
+        let num_variables = cfn.num_variables();
+
         SRMP {
             options: options,
             cfn: cfn,

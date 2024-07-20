@@ -1,4 +1,4 @@
-// energy.rs
+#![allow(dead_code)]
 
 // translation from SRMP.h:
 // * Energy -> CostFunctionNetwork

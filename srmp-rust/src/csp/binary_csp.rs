@@ -1,9 +1,12 @@
 #![allow(dead_code)]
 
-use std::ops::Range;
+use crate::data_structures::compressed_bit_table::CompressedBitTable;
+use crate::data_structures::jagged_table::JaggedTable;
 
-use crate::tables::compressed_bit_table::CompressedBitTable;
-use crate::tables::jagged_table::JaggedTable;
+/// implementation error: BinaryCSP works only if all domain sizes are the same
+/// to fix:
+/// 1. implement JaggedBitArrayD (or temporarily use ArrayD<bool>, then upgrade),
+/// 2. rewrite BinaryCSP analogous to CFN (need to re-use connection graph to save memory => BoolCSP rather than general BinaryCSP)
 
 /// A data structure for working with binary constraint satisfaction problems
 ///
@@ -16,7 +19,9 @@ use crate::tables::jagged_table::JaggedTable;
 /// * var_x > var_y is swapped to ensure var_x <= var_y (because order doesn't matter),
 /// * var_y is replaced by var_y - var_x - 1, because all previous entries (with var_y' <= var_x) do not exist
 ///
+/// todo: rewrite using BitVec instead of CompressedBitTable
 /// todo: avoid flipping variable order when accessing binary constraints?
+/// -- re-implement using Rc/Box?
 pub struct BinaryCSP {
     unary_constraints: CompressedBitTable,
     binary_constraints: JaggedTable<Option<CompressedBitTable>>,
@@ -38,15 +43,15 @@ impl BinaryCSP {
         // initializes binary CSP with consistent unary constraints and no binary constraints
         let num_variables = domain_sizes.len();
         let unary_constraints = (0..num_variables)
-            .map(|var| vec![1; domain_sizes[var]])
-            .collect::<Vec<Vec<u8>>>();
+            .map(|var| vec![true; domain_sizes[var]])
+            .collect::<Vec<Vec<bool>>>();
         BinaryCSP {
             unary_constraints: unary_constraints.into(),
             binary_constraints: empty_binary_constraints(num_variables),
         }
     }
 
-    pub fn from_unary_constraints(unary_constraints: Vec<Vec<u8>>) -> Self {
+    pub fn from_unary_constraints(unary_constraints: Vec<Vec<bool>>) -> Self {
         // initializes binary CSP with given unary constraints and no binary constraints
         let num_variables = unary_constraints.len();
         BinaryCSP {
@@ -59,19 +64,19 @@ impl BinaryCSP {
         self.unary_constraints.len()
     }
 
-    pub fn var_range(&self) -> Range<usize> {
+    pub fn var_range(&self) -> impl Iterator<Item = usize> {
         0..self.num_variables()
     }
 
-    pub fn var_range_from(&self, var: usize) -> Range<usize> {
+    pub fn var_range_from(&self, var: usize) -> impl Iterator<Item = usize> {
         var + 1..self.num_variables()
     }
 
     pub fn domain_size(&self, var: usize) -> usize {
-        self.unary_constraints.inner_len(var)
+        self.unary_constraints.inner_len()
     }
 
-    pub fn domain_range(&self, var: usize) -> Range<usize> {
+    pub fn domain_range(&self, var: usize) -> impl Iterator<Item = usize> {
         0..self.domain_size(var)
     }
 
@@ -95,7 +100,7 @@ impl BinaryCSP {
         &mut self,
         var_x: usize,
         var_y: usize,
-        binary_constraint: Vec<Vec<u8>>,
+        binary_constraint: Vec<Vec<bool>>,
     ) -> &mut Self {
         let (var_x, var_y) = self.binary_constraint_index(var_x, var_y);
         // todo: assert that input (binary_constraint) has correct shape
@@ -104,10 +109,10 @@ impl BinaryCSP {
         self
     }
 
-    pub fn is_unary_satisfied(&self, var: usize, label: usize) -> bool {
+    pub fn is_unary_satisfied(&self, var: usize, label: usize) -> &bool {
         assert!(var < self.num_variables());
         assert!(label < self.domain_size(var));
-        self.unary_constraints.get([var, label]) == 1
+        self.unary_constraints.get([var, label])
     }
 
     pub fn is_binary_satisfied(
@@ -120,7 +125,7 @@ impl BinaryCSP {
         let (var_x, var_y) = self.binary_constraint_index(var_x, var_y);
         self.binary_constraints[[var_x, var_y]]
             .as_ref()
-            .map_or_else(|| true, |table| table.get([label_x, label_y]) == 1)
+            .map_or_else(|| true, |table| *table.get([label_x, label_y]))
     }
 
     pub fn exists_binary_constraint(&self, var_x: usize, var_y: usize) -> bool {

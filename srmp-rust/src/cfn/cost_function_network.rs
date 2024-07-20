@@ -6,178 +6,37 @@ use std::{
     str::FromStr,
 };
 
-use ndarray::*; // todo: replace * with what is actually used
-use petgraph::graph::*; // todo: replace * with what is actually used
-                        // use hypergraph::Hypergraph;
+use ndarray::{Array, Array1, Array2, ArrayD, Ix1, Ix2};
+use petgraph::graph::DiGraph;
 
-/// todo: docs
-/// todo: upgrade to higher-order terms
+use crate::data_structures::hypergraph::{Hypergraph, UndirectedHypergraph};
+
 pub trait CostFunctionNetwork {
     fn new() -> Self;
     fn from_domain_sizes(domain_sizes: Vec<usize>) -> Self;
-    fn from_unary_costs(unary_costs: Vec<Vec<f64>>) -> Self;
+    fn from_unary_terms(unary_function_tables: Vec<Vec<f64>>) -> Self;
 
-    fn set_nullary_cost(self, nullary_cost: f64) -> Self;
-    fn set_unary_cost(self, var: usize, costs: Array1<f64>) -> Self;
-    fn set_pairwise_cost(self, var1: usize, var2: usize, costs: Array2<f64>) -> Self;
-    fn set_cost(self, vars: &Vec<usize>, costs: ArrayD<f64>) -> Self;
+    fn set_nullary_term(self, nullary_term: f64) -> Self;
+    fn set_term(self, variables: Vec<usize>, function_table: ArrayD<f64>) -> Self;
 
     fn num_variables(&self) -> usize;
-    fn domain_size(&self, var: usize) -> usize;
+    fn domain_size(&self, variable: usize) -> usize;
 
     fn num_terms(&self) -> usize;
     fn num_non_unary_terms(&self) -> usize;
 }
 
-struct UnaryTerm {
-    costs: Array1<f64>,
-    cfn_graph_node_index: NodeIndex<usize>,
-    factor_graph_node_index: Option<NodeIndex<usize>>,
+/// todo: add LG option
+/// model format: https://uaicompetition.github.io/uci-2022/file-formats/model-format/
+pub trait UAI
+where
+    Self: CostFunctionNetwork,
+{
+    fn read_from_uai(file: File) -> Self;
+    fn write_to_uai(&self, file: File) -> io::Result<()>;
 }
 
-struct PairwiseTerm {
-    costs: Array2<f64>,
-    cfn_graph_edge_index: EdgeIndex<usize>,
-    factor_graph_node_index: Option<NodeIndex<usize>>,
-}
-
-pub struct CFNPetGraph {
-    nullary_cost: f64,
-    unary_terms: Vec<UnaryTerm>,
-    pairwise_terms: Vec<PairwiseTerm>,
-    cfn_graph: UnGraph<usize, usize, usize>, // node data = index in unary_terms, edge data = index in pairwise_terms
-}
-
-impl CostFunctionNetwork for CFNPetGraph {
-    fn new() -> Self {
-        CFNPetGraph {
-            nullary_cost: 0.,
-            unary_terms: Vec::new(),
-            pairwise_terms: Vec::new(),
-            cfn_graph: UnGraph::with_capacity(0, 0),
-        }
-    }
-
-    fn from_domain_sizes(domain_sizes: Vec<usize>) -> Self {
-        let num_variables = domain_sizes.len();
-
-        let mut graph = UnGraph::with_capacity(num_variables, 0);
-        let node_indices: Vec<NodeIndex<usize>> =
-            (0..num_variables).map(|var| graph.add_node(var)).collect();
-
-        let unary_terms = domain_sizes
-            .into_iter()
-            .enumerate()
-            .map(|(var, domain_size)| UnaryTerm {
-                costs: vec![0.; domain_size].into(),
-                cfn_graph_node_index: node_indices[var],
-                factor_graph_node_index: None,
-            })
-            .collect();
-
-        CFNPetGraph {
-            nullary_cost: 0.,
-            unary_terms: unary_terms,
-            pairwise_terms: Vec::new(),
-            cfn_graph: graph,
-        }
-    }
-
-    fn from_unary_costs(unary_costs: Vec<Vec<f64>>) -> Self {
-        let num_variables = unary_costs.len();
-
-        let mut graph = UnGraph::with_capacity(num_variables, 0);
-        let node_indices: Vec<NodeIndex<usize>> =
-            (0..num_variables).map(|var| graph.add_node(var)).collect();
-
-        let unary_terms = unary_costs
-            .into_iter()
-            .enumerate()
-            .map(|(var, unary_cost)| UnaryTerm {
-                costs: unary_cost.into(),
-                cfn_graph_node_index: node_indices[var],
-                factor_graph_node_index: None,
-            })
-            .collect();
-
-        CFNPetGraph {
-            nullary_cost: 0.,
-            unary_terms: unary_terms,
-            pairwise_terms: Vec::new(),
-            cfn_graph: graph,
-        }
-    }
-
-    fn set_nullary_cost(mut self, nullary_cost: f64) -> Self {
-        self.nullary_cost = nullary_cost;
-        self
-    }
-
-    fn set_unary_cost(mut self, var: usize, costs: Array1<f64>) -> Self {
-        let &factor_index = self.cfn_graph.node_weight(var.into()).unwrap();
-        self.unary_terms[factor_index].costs = costs;
-        self
-    }
-
-    fn set_pairwise_cost(mut self, var1: usize, var2: usize, costs: Array2<f64>) -> Self {
-        assert!(var1 < var2); // todo: rotate costs table if var1 > var2
-        if let Some(&factor_index) = self
-            .cfn_graph
-            .find_edge(var1.into(), var2.into())
-            .and_then(|edge_index| self.cfn_graph.edge_weight(edge_index))
-        {
-            self.pairwise_terms[factor_index].costs = costs;
-        } else {
-            let edge_index =
-                self.cfn_graph
-                    .add_edge(var1.into(), var2.into(), self.pairwise_terms.len());
-            self.pairwise_terms.push(PairwiseTerm {
-                costs: costs,
-                cfn_graph_edge_index: edge_index,
-                factor_graph_node_index: None,
-            });
-        }
-        self
-    }
-
-    fn set_cost(self, vars: &Vec<usize>, costs: ArrayD<f64>) -> Self {
-        match vars.len() {
-            0 => self.set_nullary_cost(costs[[0]]),
-            1 => self.set_unary_cost(
-                vars[0],
-                costs
-                    .into_dimensionality::<Ix1>()
-                    .expect("Costs array should be 1-dimensional"),
-            ),
-            2 => self.set_pairwise_cost(
-                vars[0],
-                vars[1],
-                costs
-                    .into_dimensionality::<Ix2>()
-                    .expect("Costs array should be 2-dimensional"),
-            ),
-            _ => unimplemented!("CFNPetGraph does not support terms of higher arity than 2."),
-        }
-    }
-
-    fn num_variables(&self) -> usize {
-        self.unary_terms.len()
-    }
-
-    fn domain_size(&self, var: usize) -> usize {
-        self.unary_terms[var].costs.len()
-    }
-
-    fn num_terms(&self) -> usize {
-        self.unary_terms.len() + self.pairwise_terms.len()
-    }
-
-    fn num_non_unary_terms(&self) -> usize {
-        self.pairwise_terms.len()
-    }
-}
-
-enum UAIState {
+pub enum UAIState {
     GraphType,
     NumberOfVariables,
     DomainSizes,
@@ -188,11 +47,188 @@ enum UAIState {
     EndOfFile,
 }
 
-/// todo: documentation
-/// model format: https://uaicompetition.github.io/uci-2022/file-formats/model-format/
-pub trait UAI {
-    fn read_from_uai(file: File) -> Self;
-    fn write_to_uai(&self, file: File) -> io::Result<()>;
+/// todo: multiple variants and methods
+pub struct RelaxationGraph {
+    graph: DiGraph<CFNOrigin, (), usize>,
+    node_index_of_term: Vec<usize>,
+}
+
+enum CFNOrigin {
+    Node(usize),
+    Hyperedge(usize),
+}
+
+pub struct MinimalEdges;
+
+pub enum RelaxationType {
+    MinimalEdges(MinimalEdges),
+}
+
+pub trait ConstructRelaxation<RelaxationType>
+where
+    Self: CostFunctionNetwork,
+{
+    fn construct_relaxation(&self) -> RelaxationGraph;
+}
+
+// implementation details
+struct UnaryTerm {
+    function_table: Array1<f64>,
+    variable_idx: usize,
+}
+
+struct PairwiseTerm {
+    function_table: Array2<f64>,
+    hyperedge_idx: usize,
+}
+
+struct GeneralTerm {
+    function_table: ArrayD<f64>,
+    hyperedge_idx: usize,
+}
+
+enum CFNTerm {
+    Unary(UnaryTerm),
+    Pairwise(PairwiseTerm),
+    General(GeneralTerm),
+}
+
+struct CFNVariable {
+    domain_size: usize,
+    unary_term_idx: Option<usize>,
+}
+
+pub struct GeneralCFN {
+    hypergraph: UndirectedHypergraph<CFNVariable, usize>,
+    terms: Vec<CFNTerm>,
+    nullary_term: f64,
+}
+
+impl CostFunctionNetwork for GeneralCFN {
+    fn new() -> Self {
+        GeneralCFN {
+            hypergraph: UndirectedHypergraph::with_capacity(0, 0),
+            terms: Vec::new(),
+            nullary_term: 0.,
+        }
+    }
+
+    fn from_domain_sizes(domain_sizes: Vec<usize>) -> Self {
+        let node_data = domain_sizes
+            .into_iter()
+            .map(|domain_size| CFNVariable {
+                domain_size: domain_size,
+                unary_term_idx: None,
+            })
+            .collect();
+
+        GeneralCFN {
+            hypergraph: UndirectedHypergraph::from_node_data(node_data, 0),
+            terms: Vec::new(),
+            nullary_term: 0.,
+        }
+    }
+
+    fn from_unary_terms(unary_function_tables: Vec<Vec<f64>>) -> Self {
+        let node_data = unary_function_tables
+            .iter()
+            .enumerate()
+            .map(|(index, unary_function_table)| CFNVariable {
+                domain_size: unary_function_table.len(),
+                unary_term_idx: Some(index),
+            })
+            .collect();
+        let terms = unary_function_tables
+            .into_iter()
+            .enumerate()
+            .map(|(index, unary_function_table)| {
+                CFNTerm::Unary(UnaryTerm {
+                    function_table: unary_function_table.into(),
+                    variable_idx: index,
+                })
+            })
+            .collect();
+
+        GeneralCFN {
+            hypergraph: UndirectedHypergraph::from_node_data(node_data, 0),
+            terms: terms,
+            nullary_term: 0.,
+        }
+    }
+
+    fn set_nullary_term(mut self, nullary_term: f64) -> Self {
+        self.nullary_term = nullary_term;
+        self
+    }
+
+    fn set_term(mut self, variables: Vec<usize>, function_table: ArrayD<f64>) -> Self {
+        assert!(variables
+            .iter()
+            .all(|&variable| variable < self.num_variables()));
+        match variables.len() {
+            0 => self.set_nullary_term(function_table[[0]]),
+            1 => {
+                let new_unary_term = CFNTerm::Unary(UnaryTerm {
+                    function_table: function_table
+                        .into_dimensionality::<Ix1>()
+                        .expect("Function table should be 1-dimensional"),
+                    variable_idx: variables[0],
+                });
+                if let Some(unary_term_index) =
+                    self.hypergraph.node_data(variables[0]).unary_term_idx
+                {
+                    self.terms[unary_term_index] = new_unary_term;
+                } else {
+                    self.hypergraph.node_data_mut(variables[0]).unary_term_idx =
+                        Some(self.terms.len());
+                    self.terms.push(new_unary_term);
+                }
+                self
+            }
+            2 => {
+                // todo: check if the term already exists
+                let hyperedge_idx = self.hypergraph.add_hyperedge(variables, self.terms.len());
+                self.terms.push(CFNTerm::Pairwise(PairwiseTerm {
+                    function_table: function_table
+                        .into_dimensionality::<Ix2>()
+                        .expect("Function table should be 2-dimensional"),
+                    hyperedge_idx: hyperedge_idx,
+                }));
+                self
+            }
+            _ => {
+                // todo: check if the term already exists
+                let hyperedge_idx = self.hypergraph.add_hyperedge(variables, self.terms.len());
+                self.terms.push(CFNTerm::General(GeneralTerm {
+                    function_table: function_table.into(),
+                    hyperedge_idx: hyperedge_idx,
+                }));
+                self
+            }
+        }
+    }
+
+    fn num_variables(&self) -> usize {
+        self.hypergraph.num_nodes()
+    }
+
+    fn domain_size(&self, variable: usize) -> usize {
+        self.hypergraph.node_data(variable).domain_size
+    }
+
+    fn num_terms(&self) -> usize {
+        self.terms.len()
+    }
+
+    fn num_non_unary_terms(&self) -> usize {
+        self.terms
+            .iter()
+            .filter(|&term| match term {
+                CFNTerm::Unary(_) => false,
+                _ => true,
+            })
+            .count()
+    }
 }
 
 fn string_to_vec<T>(string: &str) -> Vec<T>
@@ -213,7 +249,7 @@ fn vec_to_string<T: ToString>(v: &Vec<T>) -> String {
         .join(" ")
 }
 
-impl UAI for CFNPetGraph {
+impl UAI for GeneralCFN {
     fn read_from_uai(file: File) -> Self {
         let lines = BufReader::new(file).lines();
 
@@ -221,8 +257,7 @@ impl UAI for CFNPetGraph {
         let mut trimmed_line;
 
         let mut num_variables = 0;
-        let mut num_functions = 0;
-        let mut cfn = CFNPetGraph::new();
+        let mut cfn = GeneralCFN::new();
         let mut function_scopes = Vec::new();
         let mut function_entries = Vec::new();
 
@@ -249,25 +284,24 @@ impl UAI for CFNPetGraph {
                 UAIState::DomainSizes => {
                     let domain_sizes = string_to_vec(trimmed_line);
                     assert_eq!(num_variables, domain_sizes.len());
-                    cfn = CFNPetGraph::from_domain_sizes(domain_sizes);
+                    cfn = GeneralCFN::from_domain_sizes(domain_sizes);
                     state = UAIState::NumberOfFunctions;
                 }
                 UAIState::NumberOfFunctions => {
-                    num_functions = trimmed_line.parse::<usize>().unwrap();
+                    let num_functions = trimmed_line.parse::<usize>().unwrap();
                     function_scopes = Vec::with_capacity(num_functions);
                     state = UAIState::FunctionScopes(0);
                 }
                 UAIState::FunctionScopes(function_idx) => {
-                    let mut function_scope = string_to_vec(trimmed_line);
-                    let scope_len = function_scope.remove(0);
-                    assert_eq!(scope_len, function_scope.len());
-                    function_scopes.push(function_scope);
-
-                    if function_idx < num_functions - 1 {
-                        state = UAIState::FunctionScopes(function_idx + 1);
+                    let function_desc = string_to_vec(trimmed_line);
+                    let (scope_len, function_scope) = function_desc.split_at(1);
+                    assert_eq!(scope_len[0], function_scope.len());
+                    function_scopes.push(function_scope.to_vec());
+                    state = if function_idx + 1 < function_scopes.capacity() {
+                        UAIState::FunctionScopes(function_idx + 1)
                     } else {
-                        state = UAIState::NumberOfTableValues(0);
-                    }
+                        UAIState::NumberOfTableValues(0)
+                    };
                 }
                 UAIState::NumberOfTableValues(function_idx) => {
                     assert!(function_idx < function_scopes.len());
@@ -275,21 +309,21 @@ impl UAI for CFNPetGraph {
                     function_entries = Vec::with_capacity(num_entries);
                     state = UAIState::TableValues(function_idx, num_entries);
                 }
-                UAIState::TableValues(function_idx, num_entries) => {
+                UAIState::TableValues(function_idx, max_num_entries) => {
                     assert!(function_idx < function_scopes.len());
                     let mut new_entries = string_to_vec(trimmed_line);
                     function_entries.append(&mut new_entries);
 
                     let cur_num_entries = function_entries.len();
-                    assert!(cur_num_entries <= num_entries);
-                    if cur_num_entries < num_entries {
+                    assert!(cur_num_entries <= max_num_entries);
+                    if cur_num_entries < max_num_entries {
                         // need to collect more table entries
-                        state = UAIState::TableValues(function_idx, cur_num_entries);
+                        state = UAIState::TableValues(function_idx, max_num_entries);
                         continue;
                     }
 
-                    // collected all table entries, ready to add cost function to cfn
-                    let costs = Array::from_shape_vec(
+                    // collected all table entries, ready to add term to cost function network
+                    let function_table = Array::from_shape_vec(
                         function_scopes[function_idx]
                             .iter()
                             .map(|&var| cfn.domain_size(var))
@@ -297,18 +331,15 @@ impl UAI for CFNPetGraph {
                         function_entries.drain(..).collect(),
                     )
                     .unwrap();
-                    cfn = cfn.set_cost(&function_scopes[function_idx], costs);
+                    cfn = cfn.set_term(function_scopes[function_idx].to_vec(), function_table);
 
-                    if function_idx < function_scopes.len() - 1 {
-                        // need to read more functions
-                        state = UAIState::NumberOfTableValues(function_idx + 1);
+                    state = if function_idx + 1 < function_scopes.len() {
+                        UAIState::NumberOfTableValues(function_idx + 1)
                     } else {
-                        // all functions read
-                        state = UAIState::EndOfFile;
-                    }
+                        UAIState::EndOfFile
+                    };
                 }
                 UAIState::EndOfFile => {
-                    // ignore trailing lines
                     break;
                 }
             }
@@ -333,101 +364,90 @@ impl UAI for CFNPetGraph {
 
         // - function scopes
         // -- number of functions
-        write!(
-            file,
-            "{}\n",
-            self.unary_terms.len() + self.pairwise_terms.len()
-        )?;
-        // -- unary function scopes
-        for var in 0..num_variables {
-            write!(file, "1 {var}\n")?;
-        }
-        // -- binary function scopes
-        for pairwise_term_edge_index in self.cfn_graph.edge_indices() {
-            let (node1, node2) = self
-                .cfn_graph
-                .edge_endpoints(pairwise_term_edge_index)
-                .unwrap();
-            let (var1, var2) = (
-                self.cfn_graph.node_weight(node1).unwrap(),
-                self.cfn_graph.node_weight(node2).unwrap(),
-            );
-            let (var1, var2) = match var1 < var2 {
-                true => (var1, var2),
-                false => (var2, var1),
-            };
-            write!(file, "2 {var1} {var2}\n")?;
+        write!(file, "{}\n", self.num_terms())?;
+        // -- function scopes
+        for term in &self.terms {
+            // ---- number of variables, list of variables
+            match term {
+                CFNTerm::Unary(term) => {
+                    write!(file, "1 {}\n", term.variable_idx)?;
+                }
+                CFNTerm::Pairwise(term) => {
+                    let variables = self.hypergraph.hyperedge_endpoints(term.hyperedge_idx);
+                    write!(file, "2 {}\n", vec_to_string(variables))?;
+                }
+                CFNTerm::General(term) => {
+                    let variables = self.hypergraph.hyperedge_endpoints(term.hyperedge_idx);
+                    let num_variables = variables.len();
+                    write!(file, "{} {}\n", num_variables, vec_to_string(variables))?;
+                }
+            }
         }
 
         // function tables
-        // - unary function tables
-        for unary_term in &self.unary_terms {
+        for term in &self.terms {
             // -- blank line, number of table values, table values
-            write!(
-                file,
-                "\n{}\n{}\n",
-                unary_term.costs.len(),
-                vec_to_string(&unary_term.costs.iter().collect::<Vec<_>>())
-            )?;
-        }
-        // - binary function tables
-        for pairwise_term in &self.pairwise_terms {
-            // -- blank line, number of table values, table values
-            write!(
-                file,
-                "\n{}\n{}\n",
-                pairwise_term.costs.len(),
-                vec_to_string(&pairwise_term.costs.iter().collect::<Vec<_>>())
-            )?;
+            match term {
+                CFNTerm::Unary(term) => write!(
+                    file,
+                    "\n{}\n{}\n",
+                    term.function_table.len(),
+                    vec_to_string(&term.function_table.iter().collect::<Vec<_>>())
+                )?,
+                CFNTerm::Pairwise(term) => write!(
+                    file,
+                    "\n{}\n{}\n",
+                    term.function_table.len(),
+                    vec_to_string(&term.function_table.iter().collect::<Vec<_>>())
+                )?,
+                CFNTerm::General(term) => write!(
+                    file,
+                    "\n{}\n{}\n",
+                    term.function_table.len(),
+                    vec_to_string(&term.function_table.iter().collect::<Vec<_>>())
+                )?,
+            }
         }
 
         Ok(())
     }
 }
 
-/// todo: docs
-/// todo: multiple variants and methods
-struct FactorGraph {
-    graph: DiGraph<usize, (), usize>, // node data = index in unary_terms or pairwise_terms (latter: shifted by cfn.num_variables())
-}
+impl ConstructRelaxation<MinimalEdges> for GeneralCFN {
+    fn construct_relaxation(&self) -> RelaxationGraph {
+        let mut graph = DiGraph::with_capacity(self.num_terms(), 2 * self.num_non_unary_terms());
+        let mut node_index_of_term = Vec::with_capacity(self.num_terms());
+        let mut variable_node_idx = Vec::with_capacity(self.num_variables());
 
-trait ConstructRelaxation<RelaxationType> {
-    fn construct_relaxation(&mut self) -> FactorGraph;
-}
-
-struct MinimalEdges;
-
-impl ConstructRelaxation<MinimalEdges> for CFNPetGraph {
-    fn construct_relaxation(&mut self) -> FactorGraph {
-        let mut factor_graph = DiGraph::with_capacity(
-            self.num_terms(),
-            2 * self.num_non_unary_terms(),
-        );
-
-        for var_node_index in self.cfn_graph.node_indices() {
-            let &var_index = self.cfn_graph.node_weight(var_node_index).unwrap();
-            self.unary_terms[var_index].factor_graph_node_index =
-                Some(factor_graph.add_node(var_index));
+        for variable_idx in self.hypergraph.iter_node_indices() {
+            variable_node_idx.push(graph.add_node(CFNOrigin::Node(variable_idx)));
         }
 
-        for pairwise_term_edge_index in self.cfn_graph.edge_indices() {
-            let &pairwise_term_index = self
-                .cfn_graph
-                .edge_weight(pairwise_term_edge_index)
-                .unwrap();
-            let fg_node_index = factor_graph.add_node(self.num_variables() + pairwise_term_index);
-            self.pairwise_terms[pairwise_term_index].factor_graph_node_index = Some(fg_node_index);
-
-            let (var1, var2) = self
-                .cfn_graph
-                .edge_endpoints(pairwise_term_edge_index)
-                .unwrap();
-            factor_graph.add_edge(fg_node_index, var1, ());
-            factor_graph.add_edge(fg_node_index, var2, ());
+        for term in &self.terms {
+            match term {
+                CFNTerm::Unary(term) => {
+                    node_index_of_term.push(term.variable_idx); // same index as in CFN's hypergraph
+                }
+                CFNTerm::Pairwise(term) => {
+                    let term_node_idx = graph.add_node(CFNOrigin::Hyperedge(term.hyperedge_idx));
+                    node_index_of_term.push(term_node_idx.index());
+                    for &variable in self.hypergraph.hyperedge_endpoints(term.hyperedge_idx) {
+                        graph.add_edge(term_node_idx, variable_node_idx[variable], ());
+                    }
+                }
+                CFNTerm::General(term) => {
+                    let term_node_idx = graph.add_node(CFNOrigin::Hyperedge(term.hyperedge_idx));
+                    node_index_of_term.push(term_node_idx.index());
+                    for &variable in self.hypergraph.hyperedge_endpoints(term.hyperedge_idx) {
+                        graph.add_edge(term_node_idx, variable_node_idx[variable], ());
+                    }
+                }
+            }
         }
 
-        FactorGraph {
-            graph: factor_graph,
+        RelaxationGraph {
+            graph,
+            node_index_of_term: node_index_of_term,
         }
     }
 }
