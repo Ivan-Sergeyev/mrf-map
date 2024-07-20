@@ -1,8 +1,6 @@
 mod data_structures {
-    pub mod compressed_bit_table;
     pub mod hypergraph;
-    pub mod jagged_table;
-    pub mod justified_table;
+    pub mod jagged_arrays;
 }
 
 mod csp {
@@ -16,8 +14,8 @@ mod cfn {
     pub mod solver;
 }
 
-use std::fs::OpenOptions;
 use cfn::cost_function_network::*;
+use std::fs::OpenOptions;
 
 fn main() {
     env_logger::init();

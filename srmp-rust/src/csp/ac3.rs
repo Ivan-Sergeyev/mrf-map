@@ -130,7 +130,11 @@ mod tests {
 
     #[test]
     fn consistent_two_variables() {
-        let mut csp = BinaryCSP::from_unary_constraints(vec![vec![true, true], vec![true, false], vec![false, true]]);
+        let mut csp = BinaryCSP::from_unary_constraints(vec![
+            vec![true, true],
+            vec![true, false],
+            vec![false, true],
+        ]);
         csp.add_binary_constraint(0, 1, vec![vec![true, false], vec![false, true]]);
         csp.add_binary_constraint(1, 2, vec![vec![true, true], vec![false, true]]);
         csp.add_binary_constraint(0, 2, vec![vec![true, true], vec![false, true]]);
@@ -139,4 +143,5 @@ mod tests {
     }
 
     // todo: test with different unary domain sizes
+    // todo: test where ac3 needs to revisit edges several times
 }

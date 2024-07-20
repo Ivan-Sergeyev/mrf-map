@@ -1,12 +1,6 @@
 #![allow(dead_code)]
 
-use crate::data_structures::compressed_bit_table::CompressedBitTable;
-use crate::data_structures::jagged_table::JaggedTable;
-
-/// implementation error: BinaryCSP works only if all domain sizes are the same
-/// to fix:
-/// 1. implement JaggedBitArrayD (or temporarily use ArrayD<bool>, then upgrade),
-/// 2. rewrite BinaryCSP analogous to CFN (need to re-use connection graph to save memory => BoolCSP rather than general BinaryCSP)
+use crate::data_structures::jagged_arrays::{JaggedArray2, JaggedBitArray2};
 
 /// A data structure for working with binary constraint satisfaction problems
 ///
@@ -23,11 +17,11 @@ use crate::data_structures::jagged_table::JaggedTable;
 /// todo: avoid flipping variable order when accessing binary constraints?
 /// -- re-implement using Rc/Box?
 pub struct BinaryCSP {
-    unary_constraints: CompressedBitTable,
-    binary_constraints: JaggedTable<Option<CompressedBitTable>>,
+    unary_constraints: JaggedBitArray2,
+    binary_constraints: JaggedArray2<Option<JaggedBitArray2>>,
 }
 
-fn empty_binary_constraints(num_variables: usize) -> JaggedTable<Option<CompressedBitTable>> {
+fn empty_binary_constraints(num_variables: usize) -> JaggedArray2<Option<JaggedBitArray2>> {
     (0..num_variables)
         .map(|var| {
             std::iter::repeat_with(|| None)
@@ -73,7 +67,7 @@ impl BinaryCSP {
     }
 
     pub fn domain_size(&self, var: usize) -> usize {
-        self.unary_constraints.inner_len()
+        self.unary_constraints.inner_len(var)
     }
 
     pub fn domain_range(&self, var: usize) -> impl Iterator<Item = usize> {
