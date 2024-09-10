@@ -25,7 +25,7 @@ impl AC3 {
         for var in csp.var_range() {
             let active_domain: Vec<usize> = csp
                 .domain_range(var)
-                .filter(|&label| csp.is_unary_satisfied(var, label))
+                .filter(|&label| *csp.is_unary_satisfied(var, label))
                 .collect();
             if active_domain.is_empty() {
                 return Some(var); // preemptive domain wipe out at var
@@ -97,4 +97,51 @@ impl AC3 {
 
         None // CSP is arc consistent
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frustrated_cycle() {
+        let mut fc_csp = BinaryCSP::from_unary_constraints(vec![vec![true, true]; 3]);
+        fc_csp.add_binary_constraint(0, 1, vec![vec![false, true], vec![false, true]]);
+        fc_csp.add_binary_constraint(1, 2, vec![vec![false, true], vec![false, true]]);
+        fc_csp.add_binary_constraint(2, 0, vec![vec![false, true], vec![false, true]]);
+        let ac3_result = AC3::new().run_algorithm(&fc_csp);
+        assert_eq!(ac3_result, None);
+    }
+
+    #[test]
+    fn inconsistent_one_variable() {
+        let csp = BinaryCSP::from_unary_constraints(vec![vec![false; 5]]);
+        let ac3_result = AC3::new().run_algorithm(&csp);
+        assert_eq!(ac3_result, Some(0));
+    }
+
+    #[test]
+    fn inconsistent_two_variables() {
+        let mut csp = BinaryCSP::from_unary_constraints(vec![vec![true, false], vec![false, true]]);
+        csp.add_binary_constraint(0, 1, vec![vec![true, false], vec![false, true]]);
+        let ac3_result = AC3::new().run_algorithm(&csp);
+        assert_eq!(ac3_result, Some(0));
+    }
+
+    #[test]
+    fn consistent_two_variables() {
+        let mut csp = BinaryCSP::from_unary_constraints(vec![
+            vec![true, true],
+            vec![true, false],
+            vec![false, true],
+        ]);
+        csp.add_binary_constraint(0, 1, vec![vec![true, false], vec![false, true]]);
+        csp.add_binary_constraint(1, 2, vec![vec![true, true], vec![false, true]]);
+        csp.add_binary_constraint(0, 2, vec![vec![true, true], vec![false, true]]);
+        let ac3_result = AC3::new().run_algorithm(&csp);
+        assert_eq!(ac3_result, None);
+    }
+
+    // todo: test with different unary domain sizes
+    // todo: test where ac3 needs to revisit edges several times
 }

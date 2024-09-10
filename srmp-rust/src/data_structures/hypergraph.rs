@@ -40,7 +40,7 @@ pub trait Hypergraph<NodeData, HyperedgeData> {
 
 pub struct Node<NodeData, HyperedgeIndex> {
     data: NodeData,
-    adjacency_list: Vec<HyperedgeIndex>,
+    adjacent_hyperedges: Vec<HyperedgeIndex>,
 }
 
 pub struct Hyperedge<HyperedgeData, NodeIndex> {
@@ -79,7 +79,7 @@ impl<NodeData, HyperedgeData> Hypergraph<NodeData, HyperedgeData>
                 .into_iter()
                 .map(|data| Node {
                     data: data,
-                    adjacency_list: Vec::new(),
+                    adjacent_hyperedges: Vec::new(),
                 })
                 .collect(),
             hyperedges: Vec::with_capacity(hyperedge_capacity),
@@ -117,20 +117,24 @@ impl<NodeData, HyperedgeData> Hypergraph<NodeData, HyperedgeData>
     fn add_node(&mut self, node_data: NodeData) -> usize {
         self.nodes.push(Node {
             data: node_data,
-            adjacency_list: Vec::new(),
+            adjacent_hyperedges: Vec::new(),
         });
-        self.num_nodes()
+        self.num_nodes() - 1
     }
 
     fn add_hyperedge(&mut self, endpoints: Vec<usize>, hyperedge_data: HyperedgeData) -> usize {
-        assert!(endpoints
-            .iter()
-            .all(|&node_idx| node_idx < self.num_nodes()));
+        assert!(endpoints.iter().all(|&node| node < self.num_nodes()));
+        let new_hyperedge_index = self.num_hyperedges();
+        for &node in &endpoints {
+            self.nodes[node]
+                .adjacent_hyperedges
+                .push(new_hyperedge_index);
+        }
         self.hyperedges.push(Hyperedge {
             data: hyperedge_data,
             endpoints: endpoints,
         });
-        self.num_hyperedges() - 1
+        new_hyperedge_index
     }
 
     fn iter_node_indices(&self) -> impl Iterator<Item = usize> {
@@ -146,10 +150,13 @@ impl<NodeData, HyperedgeData> Hypergraph<NodeData, HyperedgeData>
         node_idx: Self::NodeIndex,
     ) -> impl Iterator<Item = usize> {
         self.nodes[node_idx]
-            .adjacency_list
+            .adjacent_hyperedges
             .iter()
             .map(|&hyperedge_idx| hyperedge_idx)
     }
 }
 
-// todo: tests
+#[cfg(test)]
+mod tests {
+    // todo: tests
+}

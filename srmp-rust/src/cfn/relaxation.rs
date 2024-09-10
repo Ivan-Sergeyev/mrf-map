@@ -1,56 +1,64 @@
+#![allow(dead_code)]
+
 use petgraph::graph::DiGraph;
 
-use crate::cfn::cost_function_network::*;
+use crate::data_structures::hypergraph::Hypergraph;
+use crate::{CostFunctionNetwork, GeneralCFN, NonUnaryOrigin, TermOrigin, UnaryOrigin};
 
-/// todo: docs
-/// todo: multiple variants and methods
-pub struct FactorGraph {
-    graph: DiGraph<usize, (), usize>, // node data = index of term in terms vector
-    term_node_index: Vec<usize>,      // node index of term in graph
-}
+use super::term_types::{Term, TermType};
 
+pub type RelaxationGraph = DiGraph<TermOrigin, (), usize>;
+
+// todo: multiple relaxation methods
 pub struct MinimalEdges;
 
 pub enum RelaxationType {
-    MinimalEdges,
+    MinimalEdges(MinimalEdges),
 }
 
-pub trait ConstructRelaxation<RelaxationType> {
-    fn construct_relaxation(&mut self) -> FactorGraph;
+pub trait ConstructRelaxation<RelaxationType>
+where
+    Self: CostFunctionNetwork,
+{
+    fn construct_relaxation(&self) -> RelaxationGraph;
 }
 
 impl ConstructRelaxation<MinimalEdges> for GeneralCFN {
-    fn construct_relaxation(&mut self) -> FactorGraph {
-        let mut factor_graph = FactorGraph {
-            graph: DiGraph::with_capacity(
-                self.num_terms(),
-                2 * self.num_non_unary_terms(),
-            ),
-            term_node_index: Vec::with_capacity(self.num_terms()),
-        };
+    fn construct_relaxation(&self) -> RelaxationGraph {
+        let edge_capacity = self
+            .terms
+            .iter()
+            .map(|term| match term {
+                Term::Nullary(_) => 0,
+                Term::Unary(_) => 0,
+                term => term.arity(),
+            })
+            .sum();
+        let mut graph = DiGraph::with_capacity(self.num_terms(), edge_capacity);
 
-        for (term_idx, term) in self.terms.iter().enumerate() {
-            let factor_graph_node_index = factor_graph.graph.add_node(term_idx);
-            factor_graph.term_node_index.push(factor_graph_node_index);
+        // Add nodes corresponding to original variables
+        for variable_idx in self.hypergraph.iter_node_indices() {
+            graph.add_node(TermOrigin::Unary(UnaryOrigin {
+                node_index: variable_idx,
+            }));
+        }
 
+        for term in &self.term_origins {
             match term {
-                CFNTerm::Unary(_) => {
-                    // no additional steps
-                    continue;
-                },
-                CFNTerm::Pairwise(term) => {
-                    // add edges from nodes corresponding to variables to node corresponding to term
-                    let (var1, var2) = self.hypergraph.edge_endpoints(term.hyperedge_idx).unwrap();
-                    factor_graph.graph.add_edge(factor_graph_node_index, var1, ());
-                    factor_graph.graph.add_edge(factor_graph_node_index, var2, ());
-                },
-                CFNTerm::General(term) => {
-                    // add edges from nodes corresponding to variables to node corresponding to term
-                    unimplemented!("GeneralCFN does not support terms of higher arity than 2. Todo: use hypergraphs in implementation.");
-                },
+                TermOrigin::Unary(_) => {}
+                TermOrigin::NonUnary(term) => {
+                    // Add node corresponding to this non-unary term
+                    let term_node_index = graph.add_node(TermOrigin::NonUnary(NonUnaryOrigin {
+                        hyperedge_index: term.hyperedge_index,
+                    }));
+                    // Add edges from this term's node to the nodes of all its endpoints
+                    for &variable in self.hypergraph.hyperedge_endpoints(term.hyperedge_index) {
+                        graph.add_edge(term_node_index, variable.into(), ());
+                    }
+                }
             }
         }
 
-        factor_graph
+        graph
     }
 }
