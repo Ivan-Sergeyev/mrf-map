@@ -135,7 +135,7 @@ impl UAI for GeneralCFN {
                         function_entries.drain(..).collect(),
                     )
                     .unwrap();
-                    let factor = match function_scopes.len() {
+                    let factor = match function_scopes[function_idx].len() {
                         1 => FactorType::Unary(function_table.into()),
                         _ => FactorType::General(function_table.into()),
                     };
@@ -192,7 +192,7 @@ impl UAI for GeneralCFN {
         }
 
         // function tables
-        for factor in &self.factors {
+        for factor in self.factors_iter() {
             // -- blank line, number of table values, table values
             match factor {
                 FactorType::Unary(factor) => write!(
@@ -207,7 +207,6 @@ impl UAI for GeneralCFN {
                     factor.function_table.len(),
                     factor.map(mapping).to_string()
                 )?,
-                _ => unimplemented!("Unsupported factor type."),
             }
         }
 

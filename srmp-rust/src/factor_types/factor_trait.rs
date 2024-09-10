@@ -5,26 +5,17 @@ use std::{
     ops::{Index, IndexMut},
 };
 
+use crate::{cfn::solution::Solution, GeneralCFN};
+
 pub trait Factor: Display + Index<usize> + IndexMut<usize> {
-    fn arity(&self) -> usize;
-    fn function_table_len(&self) -> usize;
+    fn arity(&self) -> usize; // todo: move to CFN
+    fn function_table_len(&self) -> usize; // todo: replicate for CFN, distinguish "own" len (representation) vs "max" len (product of domain sizes)
 
     fn map(&self, mapping: fn(f64) -> f64) -> Self;
     fn map_inplace(&mut self, mapping: fn(&mut f64));
 
-    fn new_zero_message(&self) -> Self;
-    fn clone_for_message_passing(&self) -> Self;
+    fn new_zero_message(&self) -> Self; // todo: update to return message? constructor for messages?
+    fn clone_for_message_passing(&self) -> Self; // same here
 
-    // message arithmetic
-    // todo: move to separate class
-    // note: reparametrizations can be treated as messages
-    // (can think of them as "initial" messages, or messages from factors to themselves)
-    fn add_assign(&mut self, rhs: &Self);
-    fn sub_assign(&mut self, rhs: &Self);
-    fn mul_assign(&mut self, rhs: f64);
-
-    fn add_assign_number(&mut self, rhs: f64);
-
-    fn min(&self) -> f64;
-    fn max(&self) -> f64;
+    fn get_cost(&self, cfn: &GeneralCFN, solution: &Solution, variables: &Vec<usize>) -> f64;
 }

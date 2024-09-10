@@ -3,8 +3,10 @@
 use ndarray::{Array, Array1, ArrayD, Ix1};
 use std::{
     fmt::Display,
-    ops::{AddAssign, Index, IndexMut, MulAssign, SubAssign},
+    ops::{Index, IndexMut},
 };
+
+use crate::{cfn::solution::Solution, GeneralCFN};
 
 use super::factor_trait::Factor;
 
@@ -43,38 +45,8 @@ impl Factor for UnaryFactor {
         }
     }
 
-    fn add_assign(&mut self, rhs: &Self) {
-        self.function_table.add_assign(&rhs.function_table);
-    }
-
-    fn sub_assign(&mut self, rhs: &Self) {
-        self.function_table.sub_assign(&rhs.function_table);
-    }
-
-    fn mul_assign(&mut self, rhs: f64) {
-        self.function_table.mul_assign(rhs);
-    }
-
-    fn add_assign_number(&mut self, rhs: f64) {
-        for elem in self.function_table.iter_mut() {
-            *elem += rhs;
-        }
-    }
-
-    fn min(&self) -> f64 {
-        *self
-            .function_table
-            .iter()
-            .min_by(|a, b| a.total_cmp(b))
-            .unwrap()
-    }
-
-    fn max(&self) -> f64 {
-        *self
-            .function_table
-            .iter()
-            .max_by(|a, b| a.total_cmp(b))
-            .unwrap()
+    fn get_cost(&self, _cfn: &GeneralCFN, solution: &Solution, variables: &Vec<usize>) -> f64 {
+        self.function_table[solution[variables[0]].expect("Solution is undefined on a variable involved in this factor")]
     }
 }
 

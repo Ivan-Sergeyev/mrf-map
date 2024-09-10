@@ -1,11 +1,15 @@
 #![allow(dead_code)]
 
+use std::slice::Iter;
+
 use ndarray::Array1;
 
 use crate::{
     data_structures::hypergraph::{Hypergraph, UndirectedHypergraph},
     factor_types::{factor_trait::Factor, factor_type::FactorType, unary_factor::UnaryFactor},
 };
+
+use super::solution::Solution;
 
 pub trait CostFunctionNetwork {
     fn new() -> Self;
@@ -14,8 +18,6 @@ pub trait CostFunctionNetwork {
 
     fn from_domain_sizes(domain_sizes: Vec<usize>) -> Self;
     fn from_unary_function_tables(unary_function_tables: Vec<Vec<f64>>) -> Self;
-
-    fn set_nullary_factor(self, nullary_factor: f64) -> Self;
 
     fn overwrite_unary_factor(self, unary_factor_index: usize, unary_factor: UnaryFactor) -> Self;
     fn add_unary_factor(self, variable: usize, unary_factor: UnaryFactor) -> Self;
@@ -26,10 +28,12 @@ pub trait CostFunctionNetwork {
 
     fn set_factor(self, variables: Vec<usize>, term: FactorType) -> Self;
 
+    fn factors_iter(&self) -> Iter<FactorType>;
+
     fn get_factor(&self, term_origin: &FactorOrigin) -> Option<&FactorType>;
 
-    fn get_factor_arity(&self, factor_origin: &FactorOrigin) -> usize;
-    fn get_factor_variables(&self, factor_origin: &FactorOrigin) -> &Vec<usize>;
+    fn arity(&self, factor_origin: &FactorOrigin) -> usize;
+    fn factor_variables(&self, factor_origin: &FactorOrigin) -> &Vec<usize>;
     fn get_function_table_len(&self, factor_origin: &FactorOrigin) -> usize;
 
     fn get_variables_difference(&self, alpha: &FactorOrigin, beta: &FactorOrigin) -> Vec<usize>;
@@ -44,11 +48,16 @@ pub trait CostFunctionNetwork {
 
     fn num_factors(&self) -> usize;
     fn num_non_unary_factors(&self) -> usize;
+
+    fn get_cost(&self, solution: &Solution) -> f64;
 }
 
+type HypergraphNodeIndex = usize;
+type HypergraphHyperedgeIndex = usize;
+
 pub enum FactorOrigin {
-    Variable(usize), // node index in hypergraph
-    NonUnary(usize), // hyperedge index in hypergraph
+    Variable(HypergraphNodeIndex),
+    NonUnary(HypergraphHyperedgeIndex),
 }
 
 pub struct CFNVariable {
@@ -61,9 +70,8 @@ type CFNFactor = usize; // index of corresponding factor in collective list
 
 pub struct GeneralCFN {
     pub hypergraph: UndirectedHypergraph<CFNVariable, CFNFactor>,
-    pub factors: Vec<FactorType>, // alternative with dynamic dispatch: Vec<dyn Factor<Output = usize>>
+    factors: Vec<FactorType>, // alternative with dynamic dispatch: Vec<dyn Factor<Output = usize>>
     pub factor_origins: Vec<FactorOrigin>,
-    pub nullary_factor: f64,
 }
 
 impl GeneralCFN {
@@ -82,7 +90,6 @@ impl CostFunctionNetwork for GeneralCFN {
             hypergraph: UndirectedHypergraph::with_capacity(0, 0),
             factors: Vec::new(),
             factor_origins: Vec::new(),
-            nullary_factor: 0.,
         }
     }
 
@@ -101,7 +108,6 @@ impl CostFunctionNetwork for GeneralCFN {
             hypergraph: UndirectedHypergraph::from_node_data(node_data, 0),
             factors: Vec::new(),
             factor_origins: Vec::new(),
-            nullary_factor: 0.,
         }
     }
 
@@ -127,13 +133,7 @@ impl CostFunctionNetwork for GeneralCFN {
             hypergraph: UndirectedHypergraph::from_node_data(node_data, 0),
             factors: terms,
             factor_origins: term_origin,
-            nullary_factor: 0.,
         }
-    }
-
-    fn set_nullary_factor(mut self, nullary_factor: f64) -> Self {
-        self.nullary_factor = nullary_factor;
-        self
     }
 
     fn overwrite_unary_factor(
@@ -185,10 +185,13 @@ impl CostFunctionNetwork for GeneralCFN {
         // Assumption: `variables` is sorted in increasing order
         assert_eq!(variables.len(), factor.arity());
         match factor {
-            FactorType::Nullary(nullary_factor) => self.set_nullary_factor(nullary_factor.value()),
             FactorType::Unary(unary_factor) => self.set_unary_factor(variables[0], unary_factor),
             _ => self.set_nonunary_factor(variables, factor),
         }
+    }
+
+    fn factors_iter(&self) -> Iter<FactorType> {
+        self.factors.iter()
     }
 
     fn get_factor(&self, factor_origin: &FactorOrigin) -> Option<&FactorType> {
@@ -199,7 +202,7 @@ impl CostFunctionNetwork for GeneralCFN {
         .and_then(|factor_index| Some(&self.factors[factor_index]))
     }
 
-    fn get_factor_arity(&self, factor_origin: &FactorOrigin) -> usize {
+    fn arity(&self, factor_origin: &FactorOrigin) -> usize {
         match factor_origin {
             FactorOrigin::Variable(_) => 1,
             FactorOrigin::NonUnary(hyperedge_index) => {
@@ -208,7 +211,7 @@ impl CostFunctionNetwork for GeneralCFN {
         }
     }
 
-    fn get_factor_variables(&self, factor_origin: &FactorOrigin) -> &Vec<usize> {
+    fn factor_variables(&self, factor_origin: &FactorOrigin) -> &Vec<usize> {
         match factor_origin {
             FactorOrigin::Variable(node_index) => &self.node_data(*node_index).singleton,
             FactorOrigin::NonUnary(hyperedge_index) => {
@@ -228,8 +231,8 @@ impl CostFunctionNetwork for GeneralCFN {
 
     fn get_variables_difference(&self, alpha: &FactorOrigin, beta: &FactorOrigin) -> Vec<usize> {
         // Assumption: alpha contains beta
-        let alpha_variables = self.get_factor_variables(alpha);
-        let beta_variables = self.get_factor_variables(beta);
+        let alpha_variables = self.factor_variables(alpha);
+        let beta_variables = self.factor_variables(beta);
         let mut difference = Vec::with_capacity(alpha_variables.len() - beta_variables.len());
         let mut var_b_iter = beta_variables.iter().peekable();
         for &var_a in alpha_variables {
@@ -271,7 +274,6 @@ impl CostFunctionNetwork for GeneralCFN {
     }
 
     fn map_factors_inplace(mut self, mapping: fn(&mut f64)) -> Self {
-        mapping(&mut self.nullary_factor);
         for i in 0..self.num_factors() {
             self.factors[i].map_inplace(mapping);
         }
@@ -294,10 +296,27 @@ impl CostFunctionNetwork for GeneralCFN {
         self.factors
             .iter()
             .filter(|&factor| match factor {
-                FactorType::Nullary(_) => false,
                 FactorType::Unary(_) => false,
                 _ => true,
             })
             .count()
+    }
+
+    fn get_cost(&self, solution: &Solution) -> f64 {
+        let mut cost = 0.;
+
+        for node_index in self.hypergraph.nodes_iter() {
+            let variable_data = self.hypergraph.node_data(node_index);
+            if let Some(unary_factor_index) = variable_data.unary_factor_index {
+                cost += self.factors[unary_factor_index].get_cost(&self, solution, &variable_data.singleton);
+            }
+        }
+
+        for hyperedge_index in self.hypergraph.hyperedges_iter() {
+            let non_unary_factor_index = self.hypergraph.hyperedge_data(hyperedge_index);
+            cost += self.factors[*non_unary_factor_index].get_cost(&self, solution, self.hypergraph.hyperedge_endpoints(hyperedge_index));
+        }
+
+        cost
     }
 }

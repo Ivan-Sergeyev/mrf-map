@@ -6,40 +6,14 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use super::{
-    factor_trait::Factor, general_factor::GeneralFactor, nullary_factor::NullaryFactor,
-    unary_factor::UnaryFactor,
-};
+use super::{factor_trait::Factor, general_factor::GeneralFactor, unary_factor::UnaryFactor};
 
 pub enum FactorType {
-    Nullary(NullaryFactor),
     Unary(UnaryFactor),
     General(GeneralFactor),
 }
 
 // todo: macro to implement "Into"
-impl<'a> Into<&'a NullaryFactor> for &'a FactorType {
-    fn into(self) -> &'a NullaryFactor {
-        match self {
-            FactorType::Nullary(nullary_factor) => nullary_factor,
-            _ => {
-                panic!("Trying to convert FactorType to NullaryFactor, but it has a different type")
-            }
-        }
-    }
-}
-
-impl<'a> Into<&'a mut NullaryFactor> for &'a mut FactorType {
-    fn into(self) -> &'a mut NullaryFactor {
-        match self {
-            FactorType::Nullary(nullary_factor) => nullary_factor,
-            _ => {
-                panic!("Trying to convert FactorType to NullaryFactor, but it has a different type")
-            }
-        }
-    }
-}
-
 impl<'a> Into<&'a UnaryFactor> for &'a FactorType {
     fn into(self) -> &'a UnaryFactor {
         match self {
@@ -83,7 +57,6 @@ impl<'a> Into<&'a mut GeneralFactor> for &'a mut FactorType {
 macro_rules! match_factor_action {
     ($factor_type:ident, $factor_match:ident, $action:expr) => {
         match $factor_type {
-            FactorType::Nullary($factor_match) => $action,
             FactorType::Unary($factor_match) => $action,
             FactorType::General($factor_match) => $action,
         }
@@ -93,7 +66,6 @@ macro_rules! match_factor_action {
 macro_rules! match_factor_wrapped_action {
     ($factor_type:ident, $factor_match:ident, $action:expr) => {
         match $factor_type {
-            FactorType::Nullary($factor_match) => FactorType::Nullary($action),
             FactorType::Unary($factor_match) => FactorType::Unary($action),
             FactorType::General($factor_match) => FactorType::General($action),
         }
@@ -125,28 +97,8 @@ impl Factor for FactorType {
         match_factor_wrapped_action!(self, factor, factor.clone_for_message_passing())
     }
 
-    fn add_assign(&mut self, rhs: &Self) {
-        match_factor_action!(self, factor, factor.add_assign(rhs.into()));
-    }
-
-    fn sub_assign(&mut self, rhs: &Self) {
-        match_factor_action!(self, factor, factor.sub_assign(rhs.into()));
-    }
-
-    fn mul_assign(&mut self, rhs: f64) {
-        match_factor_action!(self, factor, factor.mul_assign(rhs));
-    }
-
-    fn add_assign_number(&mut self, rhs: f64) {
-        match_factor_action!(self, factor, factor.add_assign_number(rhs));
-    }
-
-    fn min(&self) -> f64 {
-        match_factor_action!(self, factor, factor.min())
-    }
-
-    fn max(&self) -> f64 {
-        match_factor_action!(self, factor, factor.max())
+    fn get_cost(&self, cfn: &crate::GeneralCFN, solution: &crate::cfn::solution::Solution, variables: &Vec<usize>) -> f64 {
+        match_factor_action!(self, factor, factor.get_cost(cfn, solution, variables))
     }
 }
 

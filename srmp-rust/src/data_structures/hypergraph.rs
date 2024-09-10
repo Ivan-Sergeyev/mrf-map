@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use log::debug;
+
 /// todo: docs
 pub trait Hypergraph<NodeData, HyperedgeData> {
     type NodeIndex;
@@ -27,8 +29,8 @@ pub trait Hypergraph<NodeData, HyperedgeData> {
         hyperedge_data: HyperedgeData,
     ) -> Self::HyperedgeIndex;
 
-    fn iter_node_indices(&self) -> impl Iterator<Item = Self::NodeIndex>;
-    fn iter_hyperedge_indices(&self) -> impl Iterator<Item = Self::HyperedgeIndex>;
+    fn nodes_iter(&self) -> impl Iterator<Item = Self::NodeIndex>;
+    fn hyperedges_iter(&self) -> impl Iterator<Item = Self::HyperedgeIndex>;
 
     fn iter_incident_hyperedge_indices(
         &self,
@@ -123,6 +125,7 @@ impl<NodeData, HyperedgeData> Hypergraph<NodeData, HyperedgeData>
     }
 
     fn add_hyperedge(&mut self, endpoints: Vec<usize>, hyperedge_data: HyperedgeData) -> usize {
+        debug!("Add hyperedge {:?}", endpoints);
         assert!(endpoints.iter().all(|&node| node < self.num_nodes()));
         let new_hyperedge_index = self.num_hyperedges();
         for &node in &endpoints {
@@ -137,11 +140,11 @@ impl<NodeData, HyperedgeData> Hypergraph<NodeData, HyperedgeData>
         new_hyperedge_index
     }
 
-    fn iter_node_indices(&self) -> impl Iterator<Item = usize> {
+    fn nodes_iter(&self) -> impl Iterator<Item = usize> {
         0..self.num_nodes()
     }
 
-    fn iter_hyperedge_indices(&self) -> impl Iterator<Item = usize> {
+    fn hyperedges_iter(&self) -> impl Iterator<Item = usize> {
         0..self.num_hyperedges()
     }
 

@@ -11,26 +11,24 @@ mod factor_types {
     pub mod factor_trait;
     pub mod factor_type;
     pub mod general_factor;
-    pub mod nullary_factor;
     pub mod unary_factor;
 }
 
-mod message_passing {
-    pub mod mp_factor_type;
-    pub mod mp_general_factor;
-    pub mod mp_trait;
-    pub mod mp_unary_factor;
+mod message {
+    pub mod message_general;
+    pub mod message_trait;
+    pub mod messages;
+    // pub mod message_type;
+    // pub mod message_unary;
 }
 
 mod cfn {
     pub mod cost_function_network;
+    pub mod solution;
     pub mod relaxation;
-    pub mod uai;
-}
-
-mod algo {
     pub mod solver;
     pub mod srmp;
+    pub mod uai;
 }
 
 mod csp {
@@ -38,22 +36,31 @@ mod csp {
     pub mod binary_csp;
 }
 
-use cfn::{cost_function_network::*, uai::UAI};
+use cfn::{cost_function_network::*, relaxation::{ConstructRelaxation, Relaxation}, solver::{Solver, SolverOptions}, srmp::SRMP, uai::UAI};
+use log::debug;
 use std::fs::OpenOptions;
 
 fn main() {
-    env_logger::init();
 
+
+    // // todo: move everything below to UAI (create a test)
+    std::env::set_var("RUST_LOG", "debug");
+    env_logger::init();
+    debug!("In main");
     let input_file = OpenOptions::new()
         .read(true)
         .open("problem_instances/grid4x4.UAI.LG")
         .unwrap();
     let cfn = GeneralCFN::read_from_uai(input_file, false);
+    let relaxation = Relaxation::new(&cfn);
+    let srmp = SRMP::init(&relaxation);
+    let options = SolverOptions::default();
+    srmp.run(&options);
 
-    let output_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open("problem_instances/output.uai")
-        .unwrap();
-    cfn.write_to_uai(output_file, false).unwrap();
+    // let output_file = OpenOptions::new()
+    //     .create(true)
+    //     .write(true)
+    //     .open("problem_instances/output.uai")
+    //     .unwrap();
+    // cfn.write_to_uai(output_file, false).unwrap();
 }

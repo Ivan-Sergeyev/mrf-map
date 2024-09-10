@@ -3,8 +3,10 @@
 use ndarray::{Array, ArrayD};
 use std::{
     fmt::Display,
-    ops::{AddAssign, Index, IndexMut, MulAssign, SubAssign},
+    ops::{Index, IndexMut},
 };
+
+use crate::{cfn::solution::Solution, CostFunctionNetwork, GeneralCFN};
 
 use super::factor_trait::Factor;
 
@@ -50,38 +52,14 @@ impl Factor for GeneralFactor {
         }
     }
 
-    fn add_assign(&mut self, rhs: &Self) {
-        self.function_table.add_assign(&rhs.function_table);
-    }
-
-    fn sub_assign(&mut self, rhs: &Self) {
-        self.function_table.sub_assign(&rhs.function_table);
-    }
-
-    fn mul_assign(&mut self, rhs: f64) {
-        self.function_table.mul_assign(rhs);
-    }
-
-    fn add_assign_number(&mut self, rhs: f64) {
-        for elem in self.function_table.iter_mut() {
-            *elem += rhs;
+    fn get_cost(&self, cfn: &GeneralCFN, solution: &Solution, variables: &Vec<usize>) -> f64 {
+        let mut k_factor = 1;
+        let mut index = 0;
+        for variable in variables.iter().rev() {
+            index += k_factor * solution[*variable].expect("Solution is undefined on a variable involved in this factor");
+            k_factor *= cfn.domain_size(*variable);
         }
-    }
-
-    fn min(&self) -> f64 {
-        *self
-            .function_table
-            .iter()
-            .min_by(|a, b| a.total_cmp(b))
-            .unwrap()
-    }
-
-    fn max(&self) -> f64 {
-        *self
-            .function_table
-            .iter()
-            .max_by(|a, b| a.total_cmp(b))
-            .unwrap()
+        self.function_table[index]
     }
 }
 
