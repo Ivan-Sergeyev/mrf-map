@@ -13,7 +13,7 @@ use petgraph::{
 use crate::cfn::cost_function_network::*;
 
 use super::{
-    factor_types::{Factor, FactorType},
+    factor_types::FactorType,
     relaxation::{ConstructRelaxation, MinimalEdges, RelaxationGraph},
 };
 
@@ -46,7 +46,6 @@ where
     relaxation_graph: RelaxationGraph,
     options: SolverOptions,
     factor_sequence: Vec<NodeIndex<usize>>,
-    // factor_sequence_indices: Vec<Option<usize>>,
     edge_directions_weights: SRMPEdgeTypesWeights,
     messages: Vec<FactorType>,
     lower_bound: f64,
@@ -150,19 +149,15 @@ impl SRMP<GeneralCFN> {
 
                 // Compute theta_beta
                 // - Initialize to copy of beta (or zero if beta is an empty unary factor)
-                let mut theta_beta = self
-                    .cfn
-                    .get_factor_copy(self.relaxation_graph.node_weight(beta).unwrap());
+                let mut theta_beta = self.cfn.factor_clone_for_message_passing(
+                    self.relaxation_graph.node_weight(beta).unwrap(),
+                );
 
                 // - Subtract all outgoing messages
-                for gamma in self.relaxation_graph.edges_directed(beta, Outgoing) {
-
-                }
+                for gamma in self.relaxation_graph.edges_directed(beta, Outgoing) {}
 
                 // - Add all incoming messages
-                for alpha in self.relaxation_graph.edges_directed(beta, Incoming) {
-
-                }
+                for alpha in self.relaxation_graph.edges_directed(beta, Incoming) {}
                 // - multiply by "iteration order" weight of beta (which is the same for all "iteration order" incoming edges)
 
                 // Update incoming messages that go "in iteration order"
@@ -179,6 +174,7 @@ impl SRMP<GeneralCFN> {
             }
         }
 
+        todo!()
         // updating LB:
         // in the backward pass,
         //
@@ -228,7 +224,8 @@ impl Solver<GeneralCFN> for SRMP<GeneralCFN> {
         // Create initial (zero) messages
         let mut messages = Vec::with_capacity(relaxation_graph.edge_count());
         for edge in relaxation_graph.edge_references() {
-            messages.push(cfn.new_message(relaxation_graph.node_weight(edge.target()).unwrap()));
+            messages
+                .push(cfn.new_zero_message(relaxation_graph.node_weight(edge.target()).unwrap()));
         }
 
         // Form and return struct
@@ -237,7 +234,6 @@ impl Solver<GeneralCFN> for SRMP<GeneralCFN> {
             relaxation_graph: relaxation_graph,
             options: options,
             factor_sequence: factor_sequence,
-            // is_: factor_sequence_indices,
             edge_directions_weights: edge_directions_weights,
             messages: messages,
             lower_bound: lower_bound,

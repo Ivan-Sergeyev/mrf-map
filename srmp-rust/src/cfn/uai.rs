@@ -180,7 +180,7 @@ impl UAI for GeneralCFN {
         for term in &self.factor_origins {
             // ---- number of variables, list of variables
             match term {
-                FactorOrigin::Unary(node_index) => {
+                FactorOrigin::Variable(node_index) => {
                     write!(file, "1 {}\n", node_index)?;
                 }
                 FactorOrigin::NonUnary(hyperedge_index) => {

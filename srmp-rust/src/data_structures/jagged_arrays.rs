@@ -9,31 +9,31 @@ use bitvec::vec::BitVec;
 /// Serves to replace Vec<Vec<T>> in cases when inner Vec's might have different lengths.
 /// todo: add example usage
 pub struct JaggedArray2<T> {
-    index_shift: Vec<usize>,
+    strides: Vec<usize>,
     data: Vec<T>,
 }
 
 impl<T> JaggedArray2<T> {
     pub fn new() -> Self {
         JaggedArray2 {
-            index_shift: vec![0; 1],
+            strides: vec![0; 1],
             data: Vec::new(),
         }
     }
 
     pub fn len(&self) -> usize {
-        self.index_shift.len() - 1
+        self.strides.len() - 1
     }
 
     pub fn inner_len(&self, index: usize) -> usize {
         assert!(index < self.len());
-        self.index_shift[index + 1] - self.index_shift[index]
+        self.strides[index + 1] - self.strides[index]
     }
 
     fn internal_index(&self, index: [usize; 2]) -> usize {
         assert!(index[0] < self.len());
-        assert!(index[1] < self.index_shift[index[0] + 1] - self.index_shift[index[0]]);
-        self.index_shift[index[0]] + index[1]
+        assert!(index[1] < self.strides[index[0] + 1] - self.strides[index[0]]);
+        self.strides[index[0]] + index[1]
     }
 
     pub fn get(&self, index: [usize; 2]) -> &T {
@@ -68,20 +68,17 @@ impl<T> IndexMut<[usize; 2]> for JaggedArray2<T> {
 impl<T> From<Vec<Vec<T>>> for JaggedArray2<T> {
     fn from(value: Vec<Vec<T>>) -> Self {
         // precompute index shifts
-        let mut index_shift = Vec::with_capacity(value.len() + 1);
-        index_shift.push(0);
+        let mut strides = Vec::with_capacity(value.len() + 1);
+        strides.push(0);
         for i in 0..value.len() {
-            index_shift.push(index_shift[i] + value[i].len());
+            strides.push(strides[i] + value[i].len());
         }
 
         // flatten data
         let data = value.into_iter().flatten().collect();
 
         // construct jagged table
-        JaggedArray2 {
-            index_shift: index_shift,
-            data: data,
-        }
+        JaggedArray2 { strides, data }
     }
 }
 
@@ -91,31 +88,31 @@ impl<T> From<Vec<Vec<T>>> for JaggedArray2<T> {
 /// Analogous to BitVec, but 2-dimensional.
 /// todo: add example usage
 pub struct JaggedBitArray2 {
-    index_shift: Vec<usize>,
+    strides: Vec<usize>,
     data: BitVec,
 }
 
 impl JaggedBitArray2 {
     pub fn new() -> Self {
         JaggedBitArray2 {
-            index_shift: vec![0; 1],
+            strides: vec![0; 1],
             data: BitVec::new(),
         }
     }
 
     pub fn len(&self) -> usize {
-        self.index_shift.len() - 1
+        self.strides.len() - 1
     }
 
     pub fn inner_len(&self, index: usize) -> usize {
         assert!(index < self.len());
-        self.index_shift[index + 1] - self.index_shift[index]
+        self.strides[index + 1] - self.strides[index]
     }
 
     fn internal_index(&self, index: [usize; 2]) -> usize {
         assert!(index[0] < self.len());
-        assert!(index[1] < self.index_shift[index[0] + 1] - self.index_shift[index[0]]);
-        self.index_shift[index[0]] + index[1]
+        assert!(index[1] < self.strides[index[0] + 1] - self.strides[index[0]]);
+        self.strides[index[0]] + index[1]
     }
 
     pub fn get(&self, index: [usize; 2]) -> &bool {
@@ -139,20 +136,17 @@ impl Index<[usize; 2]> for JaggedBitArray2 {
 impl From<Vec<Vec<bool>>> for JaggedBitArray2 {
     fn from(value: Vec<Vec<bool>>) -> Self {
         // precompute index shifts
-        let mut index_shift = Vec::with_capacity(value.len() + 1);
-        index_shift.push(0);
+        let mut strides = Vec::with_capacity(value.len() + 1);
+        strides.push(0);
         for i in 0..value.len() {
-            index_shift.push(index_shift[i] + value[i].len());
+            strides.push(strides[i] + value[i].len());
         }
 
         // flatten data
         let data = value.into_iter().flatten().collect();
 
         // construct jagged bit table
-        JaggedBitArray2 {
-            index_shift: index_shift,
-            data: data,
-        }
+        JaggedBitArray2 { strides, data }
     }
 }
 
