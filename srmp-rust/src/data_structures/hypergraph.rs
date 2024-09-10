@@ -152,7 +152,4 @@ impl<NodeData, HyperedgeData> Hypergraph<NodeData, HyperedgeData>
     }
 }
 
-#[cfg(test)]
-mod tests {
-    // todo: tests
-}
+// todo: tests
