@@ -3,11 +3,11 @@
 use petgraph::graph::DiGraph;
 
 use crate::data_structures::hypergraph::Hypergraph;
-use crate::{CostFunctionNetwork, GeneralCFN, NonUnaryOrigin, TermOrigin, UnaryOrigin};
+use crate::{CostFunctionNetwork, FactorOrigin, GeneralCFN};
 
-use super::term_types::{Term, TermType};
+use super::factor_types::{Factor, FactorType};
 
-pub type RelaxationGraph = DiGraph<TermOrigin, (), usize>;
+pub type RelaxationGraph = DiGraph<FactorOrigin, (), usize>;
 
 // todo: multiple relaxation methods
 pub struct MinimalEdges;
@@ -26,33 +26,29 @@ where
 impl ConstructRelaxation<MinimalEdges> for GeneralCFN {
     fn construct_relaxation(&self) -> RelaxationGraph {
         let edge_capacity = self
-            .terms
+            .factors
             .iter()
             .map(|term| match term {
-                Term::Nullary(_) => 0,
-                Term::Unary(_) => 0,
+                FactorType::Nullary(_) => 0,
+                FactorType::Unary(_) => 0,
                 term => term.arity(),
             })
             .sum();
-        let mut graph = DiGraph::with_capacity(self.num_terms(), edge_capacity);
+        let mut graph = DiGraph::with_capacity(self.num_factors(), edge_capacity);
 
         // Add nodes corresponding to original variables
-        for variable_idx in self.hypergraph.iter_node_indices() {
-            graph.add_node(TermOrigin::Unary(UnaryOrigin {
-                node_index: variable_idx,
-            }));
+        for variable_index in self.hypergraph.iter_node_indices() {
+            graph.add_node(FactorOrigin::Unary(variable_index));
         }
 
-        for term in &self.term_origins {
+        for term in &self.factor_origins {
             match term {
-                TermOrigin::Unary(_) => {}
-                TermOrigin::NonUnary(term) => {
+                FactorOrigin::Unary(_) => {}
+                FactorOrigin::NonUnary(hyperedge_index) => {
                     // Add node corresponding to this non-unary term
-                    let term_node_index = graph.add_node(TermOrigin::NonUnary(NonUnaryOrigin {
-                        hyperedge_index: term.hyperedge_index,
-                    }));
+                    let term_node_index = graph.add_node(FactorOrigin::NonUnary(*hyperedge_index));
                     // Add edges from this term's node to the nodes of all its endpoints
-                    for &variable in self.hypergraph.hyperedge_endpoints(term.hyperedge_index) {
+                    for &variable in self.hypergraph.hyperedge_endpoints(*hyperedge_index) {
                         graph.add_edge(term_node_index, variable.into(), ());
                     }
                 }

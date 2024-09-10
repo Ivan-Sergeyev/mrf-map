@@ -10,11 +10,11 @@ mod csp {
 
 mod cfn {
     pub mod cost_function_network;
+    pub mod factor_types;
     pub mod message_passing;
     pub mod plan;
     pub mod relaxation;
     pub mod solver;
-    pub mod term_types;
     pub mod uai;
 }
 

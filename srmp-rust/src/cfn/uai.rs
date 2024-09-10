@@ -9,10 +9,10 @@ use std::{
 
 use ndarray::Array;
 
-use crate::{data_structures::hypergraph::Hypergraph, TermOrigin};
+use crate::{data_structures::hypergraph::Hypergraph, FactorOrigin};
 use crate::{CostFunctionNetwork, GeneralCFN};
 
-use super::term_types::{Term, TermType};
+use super::factor_types::{Factor, FactorType};
 
 /// todo: add LG option
 /// model format: https://uaicompetition.github.io/uci-2022/file-formats/model-format/
@@ -25,7 +25,7 @@ where
 }
 
 pub enum UAIState {
-    GraphType,
+    ModelType,
     NumberOfVariables,
     DomainSizes,
     NumberOfFunctions,
@@ -57,7 +57,7 @@ impl UAI for GeneralCFN {
     fn read_from_uai(file: File, lg: bool) -> Self {
         let lines = BufReader::new(file).lines();
 
-        let mut state = UAIState::GraphType;
+        let mut state = UAIState::ModelType;
         let mut trimmed_line;
 
         let mut num_variables = 0;
@@ -75,7 +75,7 @@ impl UAI for GeneralCFN {
             }
 
             match state {
-                UAIState::GraphType => {
+                UAIState::ModelType => {
                     if trimmed_line != "MARKOV" {
                         unimplemented!("Only MARKOV graph type is supported.");
                     }
@@ -136,10 +136,10 @@ impl UAI for GeneralCFN {
                     )
                     .unwrap();
                     let term = match function_scopes.len() {
-                        1 => Term::Unary(function_table.into()),
-                        _ => Term::General(function_table.into()),
+                        1 => FactorType::Unary(function_table.into()),
+                        _ => FactorType::General(function_table.into()),
                     };
-                    cfn = cfn.set_term(function_scopes[function_idx].to_vec(), term);
+                    cfn = cfn.set_factor(function_scopes[function_idx].to_vec(), term);
 
                     state = if function_idx + 1 < function_scopes.len() {
                         UAIState::NumberOfTableValues(function_idx + 1)
@@ -154,7 +154,7 @@ impl UAI for GeneralCFN {
         }
 
         let mapping = [|_: &mut f64| {}, |value: &mut f64| *value = value.exp()][lg as usize];
-        cfn.map_terms_inplace(mapping)
+        cfn.map_factors_inplace(mapping)
     }
 
     fn write_to_uai(&self, mut file: File, lg: bool) -> io::Result<()> {
@@ -175,16 +175,16 @@ impl UAI for GeneralCFN {
 
         // - function scopes
         // -- number of functions
-        write!(file, "{}\n", self.num_terms())?;
+        write!(file, "{}\n", self.num_factors())?;
         // -- function scopes
-        for term in &self.term_origins {
+        for term in &self.factor_origins {
             // ---- number of variables, list of variables
             match term {
-                TermOrigin::Unary(term) => {
-                    write!(file, "1 {}\n", term.node_index)?;
+                FactorOrigin::Unary(node_index) => {
+                    write!(file, "1 {}\n", node_index)?;
                 }
-                TermOrigin::NonUnary(term) => {
-                    let variables = self.hypergraph.hyperedge_endpoints(term.hyperedge_index);
+                FactorOrigin::NonUnary(hyperedge_index) => {
+                    let variables = self.hypergraph.hyperedge_endpoints(*hyperedge_index);
                     let num_variables = variables.len();
                     write!(file, "{} {}\n", num_variables, vec_to_string(variables))?;
                 }
@@ -192,16 +192,16 @@ impl UAI for GeneralCFN {
         }
 
         // function tables
-        for term in &self.terms {
+        for term in &self.factors {
             // -- blank line, number of table values, table values
             match term {
-                Term::Unary(term) => write!(
+                FactorType::Unary(term) => write!(
                     file,
                     "\n{}\n{}\n",
                     term.function_table.len(),
                     term.map(mapping).to_string()
                 )?,
-                Term::General(term) => write!(
+                FactorType::General(term) => write!(
                     file,
                     "\n{}\n{}\n",
                     term.function_table.len(),
