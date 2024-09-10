@@ -9,12 +9,13 @@ use std::{
 
 use ndarray::Array;
 
-use crate::{data_structures::hypergraph::Hypergraph, FactorOrigin};
-use crate::{CostFunctionNetwork, GeneralCFN};
+use crate::{
+    cfn::factor_types::FactorType, data_structures::hypergraph::Hypergraph, CostFunctionNetwork,
+    FactorOrigin, GeneralCFN,
+};
 
-use super::factor_types::{Factor, FactorType};
+use super::factor_types::factor_trait::Factor;
 
-/// todo: add LG option
 /// model format: https://uaicompetition.github.io/uci-2022/file-formats/model-format/
 pub trait UAI
 where

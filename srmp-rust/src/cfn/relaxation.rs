@@ -1,15 +1,16 @@
 #![allow(dead_code)]
 
-use petgraph::graph::DiGraph;
+use petgraph::graph::{DiGraph, EdgeIndex, NodeIndex};
 
 use crate::data_structures::hypergraph::Hypergraph;
 use crate::{CostFunctionNetwork, FactorOrigin, GeneralCFN};
 
-use super::factor_types::{Factor, FactorType};
+use super::factor_types::factor_trait::Factor;
+use super::factor_types::FactorType;
 
 pub struct IndexAlignmentTable {
-    first_block_indices: Vec<usize>,
-    second_block_indices: Vec<usize>,
+    first_block: Vec<usize>,
+    second_block: Vec<usize>,
 }
 
 impl IndexAlignmentTable {
@@ -82,31 +83,39 @@ impl IndexAlignmentTable {
         );
 
         IndexAlignmentTable {
-            first_block_indices,
-            second_block_indices,
+            first_block: first_block_indices,
+            second_block: second_block_indices,
         }
+    }
+
+    pub fn first_block(&self) -> &Vec<usize> {
+        &self.first_block
+    }
+
+    pub fn second_block(&self) -> &Vec<usize> {
+        &self.second_block
     }
 }
 
 pub type RelaxationGraph = DiGraph<FactorOrigin, IndexAlignmentTable, usize>;
 
-pub struct MinimalEdges;
-
-pub enum RelaxationType {
-    MinimalEdges(MinimalEdges),
-    // todo: add more relaxation methods
-}
-
-pub trait ConstructRelaxation<RelaxationType>
+pub trait RelaxationType<CFN>
 where
-    Self: CostFunctionNetwork,
+    CFN: CostFunctionNetwork,
 {
-    fn construct_relaxation(&self) -> RelaxationGraph;
+    fn construct_relaxation(cfn: &CFN) -> Self;
+    fn graph(&self) -> &RelaxationGraph;
+    fn factor_origin(&self, node: NodeIndex<usize>) -> &FactorOrigin;
+    fn index_alignment_table(&self, edge: EdgeIndex<usize>) -> &IndexAlignmentTable;
 }
 
-impl ConstructRelaxation<MinimalEdges> for GeneralCFN {
-    fn construct_relaxation(&self) -> RelaxationGraph {
-        let edge_capacity = self
+pub struct RelaxationMinimalEdges {
+    graph: RelaxationGraph,
+}
+
+impl RelaxationType<GeneralCFN> for RelaxationMinimalEdges {
+    fn construct_relaxation(cfn: &GeneralCFN) -> Self {
+        let edge_capacity = cfn
             .factors
             .iter()
             .map(|term| match term {
@@ -115,30 +124,42 @@ impl ConstructRelaxation<MinimalEdges> for GeneralCFN {
                 term => term.arity(),
             })
             .sum();
-        let mut graph = DiGraph::with_capacity(self.num_factors(), edge_capacity);
+        let mut graph = DiGraph::with_capacity(cfn.num_factors(), edge_capacity);
 
         // Add nodes corresponding to original variables
-        for variable_index in self.hypergraph.iter_node_indices() {
+        for variable_index in cfn.hypergraph.iter_node_indices() {
             graph.add_node(FactorOrigin::Variable(variable_index));
         }
 
-        for term in &self.factor_origins {
+        for term in &cfn.factor_origins {
             match term {
                 FactorOrigin::Variable(_) => {}
                 FactorOrigin::NonUnary(hyperedge_index) => {
                     // Add node corresponding to this non-unary term
                     let term_node_index = graph.add_node(FactorOrigin::NonUnary(*hyperedge_index));
                     // Add edges from this term's node to the nodes of all its endpoints
-                    for &variable in self.hypergraph.hyperedge_endpoints(*hyperedge_index) {
+                    for &variable in cfn.hypergraph.hyperedge_endpoints(*hyperedge_index) {
                         let alpha = FactorOrigin::NonUnary(*hyperedge_index);
                         let beta = FactorOrigin::Variable(variable.into());
-                        let iat = IndexAlignmentTable::new(&self, &alpha, &beta);
+                        let iat = IndexAlignmentTable::new(&cfn, &alpha, &beta);
                         graph.add_edge(term_node_index, variable.into(), iat);
                     }
                 }
             }
         }
 
-        graph
+        RelaxationMinimalEdges { graph }
+    }
+
+    fn graph(&self) -> &RelaxationGraph {
+        &self.graph
+    }
+
+    fn factor_origin(&self, node: NodeIndex<usize>) -> &FactorOrigin {
+        self.graph.node_weight(node).unwrap()
+    }
+
+    fn index_alignment_table(&self, edge: EdgeIndex<usize>) -> &IndexAlignmentTable {
+        self.graph.edge_weight(edge).unwrap()
     }
 }

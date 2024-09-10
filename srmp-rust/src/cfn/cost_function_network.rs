@@ -2,9 +2,12 @@
 
 use ndarray::Array1;
 
-use crate::data_structures::hypergraph::{Hypergraph, UndirectedHypergraph};
+use crate::{
+    cfn::factor_types::factor_trait::Factor,
+    data_structures::hypergraph::{Hypergraph, UndirectedHypergraph},
+};
 
-use super::factor_types::{Factor, FactorType, UnaryFactor};
+use super::factor_types::{unary_factor::UnaryFactor, FactorType};
 
 pub trait CostFunctionNetwork {
     fn new() -> Self;
