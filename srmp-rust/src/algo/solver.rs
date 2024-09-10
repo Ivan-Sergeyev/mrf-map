@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::CostFunctionNetwork;
+use crate::GeneralCFN;
 
 pub struct SolverOptions {
     max_iterations: usize,
@@ -44,10 +44,7 @@ impl SolverOptions {
     }
 }
 
-pub trait Solver<'a, CFN>
-where
-    CFN: CostFunctionNetwork,
-{
-    fn init(cfn: &'a CFN) -> Self;
+pub trait Solver<'a> {
+    fn init(cfn: &'a GeneralCFN) -> Self;
     fn run(self, options: &SolverOptions) -> Self;
 }

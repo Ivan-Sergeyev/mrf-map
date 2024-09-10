@@ -10,11 +10,10 @@ use std::{
 use ndarray::Array;
 
 use crate::{
-    cfn::factor_types::FactorType, data_structures::hypergraph::Hypergraph, CostFunctionNetwork,
-    FactorOrigin, GeneralCFN,
+    data_structures::hypergraph::Hypergraph,
+    factor_types::{factor_trait::Factor, factor_type::FactorType},
+    CostFunctionNetwork, FactorOrigin, GeneralCFN,
 };
-
-use super::factor_types::factor_trait::Factor;
 
 /// model format: https://uaicompetition.github.io/uci-2022/file-formats/model-format/
 pub trait UAI
@@ -127,7 +126,7 @@ impl UAI for GeneralCFN {
                         continue;
                     }
 
-                    // collected all table entries, ready to add term to cost function network
+                    // collected all table entries, ready to add factor to cost function network
                     let function_table = Array::from_shape_vec(
                         function_scopes[function_idx]
                             .iter()
@@ -136,11 +135,11 @@ impl UAI for GeneralCFN {
                         function_entries.drain(..).collect(),
                     )
                     .unwrap();
-                    let term = match function_scopes.len() {
+                    let factor = match function_scopes.len() {
                         1 => FactorType::Unary(function_table.into()),
                         _ => FactorType::General(function_table.into()),
                     };
-                    cfn = cfn.set_factor(function_scopes[function_idx].to_vec(), term);
+                    cfn = cfn.set_factor(function_scopes[function_idx].to_vec(), factor);
 
                     state = if function_idx + 1 < function_scopes.len() {
                         UAIState::NumberOfTableValues(function_idx + 1)
@@ -178,9 +177,9 @@ impl UAI for GeneralCFN {
         // -- number of functions
         write!(file, "{}\n", self.num_factors())?;
         // -- function scopes
-        for term in &self.factor_origins {
+        for factor in &self.factor_origins {
             // ---- number of variables, list of variables
-            match term {
+            match factor {
                 FactorOrigin::Variable(node_index) => {
                     write!(file, "1 {}\n", node_index)?;
                 }
@@ -193,22 +192,22 @@ impl UAI for GeneralCFN {
         }
 
         // function tables
-        for term in &self.factors {
+        for factor in &self.factors {
             // -- blank line, number of table values, table values
-            match term {
-                FactorType::Unary(term) => write!(
+            match factor {
+                FactorType::Unary(factor) => write!(
                     file,
                     "\n{}\n{}\n",
-                    term.function_table.len(),
-                    term.map(mapping).to_string()
+                    factor.function_table.len(),
+                    factor.map(mapping).to_string()
                 )?,
-                FactorType::General(term) => write!(
+                FactorType::General(factor) => write!(
                     file,
                     "\n{}\n{}\n",
-                    term.function_table.len(),
-                    term.map(mapping).to_string()
+                    factor.function_table.len(),
+                    factor.map(mapping).to_string()
                 )?,
-                _ => unimplemented!("Unsupported term type."),
+                _ => unimplemented!("Unsupported factor type."),
             }
         }
 

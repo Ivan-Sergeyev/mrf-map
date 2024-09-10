@@ -2,28 +2,40 @@
 // [example 1](https://rust-lang-nursery.github.io/rust-cookbook/development_tools/debugging/log.html#log-a-debug-message-to-the-console)
 // [example 2](https://samkeen.dev/logging-in-rust-a-beginners-guide)
 
-mod algo {
-    pub mod factor_sequence_ordering;
-    pub mod message_passing;
-    pub mod solver;
-    pub mod srmp;
-}
-
 mod data_structures {
     pub mod hypergraph;
     pub mod jagged_arrays;
 }
 
-mod csp {
-    pub mod ac3;
-    pub mod binary_csp;
+mod factor_types {
+    pub mod factor_trait;
+    pub mod factor_type;
+    pub mod general_factor;
+    pub mod nullary_factor;
+    pub mod unary_factor;
+}
+
+mod message_passing {
+    pub mod mp_factor_type;
+    pub mod mp_general_factor;
+    pub mod mp_trait;
+    pub mod mp_unary_factor;
 }
 
 mod cfn {
     pub mod cost_function_network;
-    pub mod factor_types;
     pub mod relaxation;
     pub mod uai;
+}
+
+mod algo {
+    pub mod solver;
+    pub mod srmp;
+}
+
+mod csp {
+    pub mod ac3;
+    pub mod binary_csp;
 }
 
 use cfn::{cost_function_network::*, uai::UAI};

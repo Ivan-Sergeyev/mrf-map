@@ -3,11 +3,9 @@
 use ndarray::Array1;
 
 use crate::{
-    cfn::factor_types::factor_trait::Factor,
     data_structures::hypergraph::{Hypergraph, UndirectedHypergraph},
+    factor_types::{factor_trait::Factor, factor_type::FactorType, unary_factor::UnaryFactor},
 };
-
-use super::factor_types::{unary_factor::UnaryFactor, FactorType};
 
 pub trait CostFunctionNetwork {
     fn new() -> Self;
@@ -18,8 +16,14 @@ pub trait CostFunctionNetwork {
     fn from_unary_function_tables(unary_function_tables: Vec<Vec<f64>>) -> Self;
 
     fn set_nullary_factor(self, nullary_factor: f64) -> Self;
+
+    fn overwrite_unary_factor(self, unary_factor_index: usize, unary_factor: UnaryFactor) -> Self;
+    fn add_unary_factor(self, variable: usize, unary_factor: UnaryFactor) -> Self;
     fn set_unary_factor(self, variable: usize, unary_factor: UnaryFactor) -> Self;
+
+    fn add_nonunary_factor(self, variables: Vec<usize>, nonunary_factor: FactorType) -> Self;
     fn set_nonunary_factor(self, variables: Vec<usize>, nonunary_factor: FactorType) -> Self;
+
     fn set_factor(self, variables: Vec<usize>, term: FactorType) -> Self;
 
     fn get_factor(&self, term_origin: &FactorOrigin) -> Option<&FactorType>;
@@ -57,7 +61,7 @@ type CFNFactor = usize; // index of corresponding factor in collective list
 
 pub struct GeneralCFN {
     pub hypergraph: UndirectedHypergraph<CFNVariable, CFNFactor>,
-    pub factors: Vec<FactorType>,
+    pub factors: Vec<FactorType>, // alternative with dynamic dispatch: Vec<dyn Factor<Output = usize>>
     pub factor_origins: Vec<FactorOrigin>,
     pub nullary_factor: f64,
 }
@@ -132,35 +136,58 @@ impl CostFunctionNetwork for GeneralCFN {
         self
     }
 
-    fn set_unary_factor(mut self, variable: usize, unary_factor: UnaryFactor) -> Self {
-        if let Some(unary_factor_index) = self.node_data(variable).unary_factor_index {
-            // overwrite existing unary term
-            self.factors[unary_factor_index] = FactorType::Unary(unary_factor);
-        } else {
-            // add new unary term
-            self.hypergraph.node_data_mut(variable).unary_factor_index = Some(self.factors.len());
-            self.factors.push(FactorType::Unary(unary_factor));
-            self.factor_origins.push(FactorOrigin::Variable(variable));
-        }
+    fn overwrite_unary_factor(
+        mut self,
+        unary_factor_index: usize,
+        unary_factor: UnaryFactor,
+    ) -> Self {
+        self.factors[unary_factor_index] = FactorType::Unary(unary_factor);
         self
     }
 
-    fn set_nonunary_factor(mut self, variables: Vec<usize>, nonunary_factor: FactorType) -> Self {
-        // Assumption: `variables` is sorted in increasing order
+    fn add_unary_factor(mut self, variable: usize, unary_factor: UnaryFactor) -> Self {
+        self.hypergraph.node_data_mut(variable).unary_factor_index = Some(self.factors.len());
+        self.factors.push(FactorType::Unary(unary_factor));
+        self.factor_origins.push(FactorOrigin::Variable(variable));
+        self
+    }
+
+    fn set_unary_factor(self, variable: usize, unary_factor: UnaryFactor) -> Self {
+        if let Some(unary_factor_index) = self.node_data(variable).unary_factor_index {
+            self.overwrite_unary_factor(unary_factor_index, unary_factor)
+        } else {
+            self.add_unary_factor(variable, unary_factor)
+        }
+    }
+
+    fn add_nonunary_factor(mut self, variables: Vec<usize>, non_unary_factor: FactorType) -> Self {
+        // Assumptions:
+        // - `variables` is sorted in increasing order
+        // - `non_unary_factor` is neither Nullary nor Unary
         let hyperedge_index = self.hypergraph.add_hyperedge(variables, self.factors.len());
-        self.factors.push(nonunary_factor);
+        self.factors.push(non_unary_factor);
         self.factor_origins
             .push(FactorOrigin::NonUnary(hyperedge_index));
         self
     }
 
-    fn set_factor(self, variables: Vec<usize>, term: FactorType) -> Self {
+    fn set_nonunary_factor(self, variables: Vec<usize>, nonunary_factor: FactorType) -> Self {
         // Assumption: `variables` is sorted in increasing order
-        assert_eq!(variables.len(), term.arity());
-        match term {
+        if true {
+            self.add_nonunary_factor(variables, nonunary_factor)
+        } else {
+            // todo feature: if this factor already exists, overwrite it instead
+            unimplemented!();
+        }
+    }
+
+    fn set_factor(self, variables: Vec<usize>, factor: FactorType) -> Self {
+        // Assumption: `variables` is sorted in increasing order
+        assert_eq!(variables.len(), factor.arity());
+        match factor {
             FactorType::Nullary(nullary_factor) => self.set_nullary_factor(nullary_factor.value()),
             FactorType::Unary(unary_factor) => self.set_unary_factor(variables[0], unary_factor),
-            _ => self.set_nonunary_factor(variables, term),
+            _ => self.set_nonunary_factor(variables, factor),
         }
     }
 
@@ -266,7 +293,7 @@ impl CostFunctionNetwork for GeneralCFN {
     fn num_non_unary_factors(&self) -> usize {
         self.factors
             .iter()
-            .filter(|&term| match term {
+            .filter(|&factor| match factor {
                 FactorType::Nullary(_) => false,
                 FactorType::Unary(_) => false,
                 _ => true,

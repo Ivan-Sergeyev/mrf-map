@@ -2,7 +2,7 @@
 
 - inspiration: SRMP implementation by Vladimir Kolmogorov
 
-## Implemented features
+## Implemented Features
 
 - CFNs
     - unary, binary, and higher-order terms
@@ -17,12 +17,12 @@
 - Algorithms
     - options struct, interface for algorithms via a trait
 
-## Todo list
+## Todo List
 
-- implement remaining features from SRMP:
-    - algorithms (already have outline for SRMP!)
+- implement additional features:
+    - algorithms (AMSD, MPLP)
     - optimized factor types (e.g., Potts)
-    - etc.
+    - factor ordering
 - variable splitting for CFNs and/or CPSs
 - extend CSP functionality
     - generate CSP based on CFN
