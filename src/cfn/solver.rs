@@ -21,6 +21,26 @@ impl SolverOptions {
         }
     }
 
+    pub fn set_max_iterations(&mut self, value: usize) -> &mut Self {
+        self.max_iterations = value;
+        self
+    }
+
+    pub fn set_time_max(&mut self, value: Duration) -> &mut Self {
+        self.time_max = value;
+        self
+    }
+
+    pub fn set_eps(&mut self, value: f64) -> &mut Self {
+        self.eps = value;
+        self
+    }
+
+    pub fn set_compute_solution_period(&mut self, value: usize) -> &mut Self {
+        self.compute_solution_period = value;
+        self
+    }
+
     pub fn max_iterations(&self) -> usize {
         self.max_iterations
     }

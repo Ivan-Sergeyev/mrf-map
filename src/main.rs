@@ -47,27 +47,40 @@ use log::debug;
 use std::fs::OpenOptions;
 
 fn main() {
-    // // todo: move everything below to UAI (create a test)
+    // Enable debug-level logging
     std::env::set_var("RUST_LOG", "debug");
     env_logger::init();
     debug!("In main");
 
-    let input_file = OpenOptions::new()
-        .read(true)
-        .open("problem_instances/grid4x4.UAI.LG")
-        .unwrap();
-    let mut cfn = CostFunctionNetwork::read_uai(input_file, false);
-    cfn.map_factors_inplace(|value| *value *= -1.0);
+    let test_instance_files = std::fs::read_dir("test_instances/").unwrap();
 
-    let relaxation = Relaxation::new(&cfn);
-    let srmp = SRMP::init(&relaxation);
-    let options = SolverOptions::default();
-    srmp.run(&options);
+    for path in test_instance_files {
+        let input_filename = path.unwrap().path();
 
-    // let output_file = OpenOptions::new()
-    //     .create(true)
-    //     .write(true)
-    //     .open("problem_instances/output.uai")
-    //     .unwrap();
-    // cfn.write_to_uai(output_file, false).unwrap();
+        debug!("Importing test instance from {}", input_filename.display());
+        let input_file = OpenOptions::new().read(true).open(input_filename).unwrap();
+        let cfn = CostFunctionNetwork::read_uai(input_file, false);
+
+        debug!("Flipping signs");
+        // cfn.map_factors_inplace(|value| *value *= -1.0); // flip sign (todo: is this needed?)
+
+        debug!("Constructing relaxation");
+        let relaxation = Relaxation::new(&cfn);
+
+        debug!("Initializing SRMP");
+        let srmp = SRMP::init(&relaxation);
+
+        debug!("Running SRMP");
+        let options = SolverOptions::default();
+        srmp.run(&options);
+
+        debug!("Finished\n\n\n");
+
+        // let output_file = OpenOptions::new()
+        //     .create(true)
+        //     .write(true)
+        //     .open("problem_instances/output.uai")
+        //     .unwrap();
+        // cfn.write_to_uai(output_file, false).unwrap();
+    }
 }

@@ -5,36 +5,30 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use crate::{CostFunctionNetwork, FactorOrigin};
-
 pub struct Solution {
     labels: Vec<Option<usize>>, // indexed by variables, None = variable is unlabeled, usize = label of variable
 }
 
 impl Solution {
     // Creates a new solution with each variable unassigned
-    pub fn new(cfn: &CostFunctionNetwork) -> Self {
+    pub fn new(num_variables: usize) -> Self {
         Solution {
-            labels: vec![None; cfn.num_variables()],
+            labels: vec![None; num_variables],
         }
     }
 
-    // Checks if every variable is labeled
-    pub fn is_fully_labeled(&self, cfn: &CostFunctionNetwork, factor: &FactorOrigin) -> bool {
-        // Assumption: `factor` is from `cfn`
-        cfn.factor_variables(factor)
+    // Checks if every variable in vec is labeled
+    pub fn is_fully_labeled(&self, variables: &Vec<usize>) -> bool {
+        variables
             .iter()
             .all(|variable| self.labels[*variable].is_some())
     }
 
-    // Returns number of labeled variables
-    pub fn num_labeled(&self, cfn: &CostFunctionNetwork, factor: &FactorOrigin) -> usize {
-        // Assumption: `factor` is from `cfn`
-        cfn.factor_variables(factor)
-            .iter()
-            .fold(0, |num_labeled, variable| {
-                num_labeled + self.labels[*variable].is_some() as usize
-            })
+    // Returns number of labeled variables in vec
+    pub fn num_labeled(&self, variables: &Vec<usize>) -> usize {
+        variables.iter().fold(0, |num_labeled, variable| {
+            num_labeled + self.labels[*variable].is_some() as usize
+        })
     }
 }
 

@@ -1,5 +1,5 @@
 [package]
-name = "srmp-rust"
+name = "mrf-map"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,6 +8,6 @@ queues = "1.0.2"
 hypergraph = "2.1.2"
 petgraph = "0.6.5"
 bitvec = "1.0.1"
-ndarray = "0.15.6"
+ndarray = "0.16.1"
 log = "0.4.22"
-env_logger = "0.11.3"
+env_logger = "0.11.5"

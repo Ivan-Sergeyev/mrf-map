@@ -31,7 +31,6 @@ impl FactorSequence {
     fn new(relaxation: &Relaxation) -> Self {
         FactorSequence {
             sequence: relaxation
-                .graph()
                 .node_indices()
                 .filter(|node_index| relaxation.has_edges(*node_index, Incoming))
                 .collect(),
@@ -111,7 +110,7 @@ impl NodeEdgeAttrs {
                 let mut incoming_total: usize = 0;
                 let mut incoming_before: usize = 0;
                 let mut incoming_not_before: usize = 0;
-                for alpha in relaxation.graph().neighbors_directed(beta, Incoming) {
+                for alpha in relaxation.neighbors(beta, Incoming) {
                     let is_alpha_processed = is_touched[alpha.index()];
                     node_edge_attrs
                         .edge_bound
@@ -131,7 +130,7 @@ impl NodeEdgeAttrs {
                 node_edge_attrs.node_weight_lb[beta.index()] = (pass == 1) as i64
                     * (i64::try_from(w).expect("Could not convert to signed int")
                         - incoming_total as i64);
-                for alpha_beta in relaxation.graph().edges_directed(beta, Incoming) {
+                for alpha_beta in relaxation.edges_directed(beta, Incoming) {
                     node_edge_attrs.edge_type[pass].set(
                         alpha_beta.id().index(),
                         is_touched[alpha_beta.source().index()],
@@ -158,7 +157,7 @@ pub struct SRMP<'a> {
 
 macro_rules! iter_messages {
     ($self:ident, $beta:ident, $edge_direction:expr, $pass_direction:expr, $edge:ident, $or_condition:expr) => {
-        $self.relaxation.graph().edges_directed($beta, $edge_direction)
+        $self.relaxation.edges_directed($beta, $edge_direction)
         .filter(|$edge| {$self.node_edge_attrs.edge_type[$pass_direction][$edge.id().index()]} || $or_condition)
     };
 }
@@ -166,7 +165,7 @@ macro_rules! iter_messages {
 impl<'a> SRMP<'a> {
     fn compute_solution(&self, solution: &mut Solution, beta: NodeIndex<usize>) {
         let beta_origin = self.relaxation.factor_origin(beta);
-        if solution.is_fully_labeled(self.relaxation.cfn(), beta_origin) {
+        if solution.is_fully_labeled(self.relaxation.cfn().factor_variables(beta_origin)) {
             return;
         }
 
@@ -180,67 +179,11 @@ impl<'a> SRMP<'a> {
                 solution[*node_index] = Some(theta_star.index_min())
             }
             FactorOrigin::NonUnary(_hyperedge_index) => {
-                // Compute restricted minimum
-                // todo: delegate to GeneralMessage? (note: note the same as existing GeneralMessage::restricted_min)
-                let arity = self.relaxation.cfn().arity(beta_origin);
-
-                let mut k = 0;
-                let mut k_factor_array = Vec::with_capacity(arity);
-                let mut k_array = Vec::with_capacity(arity);
-                let mut index_array = Vec::with_capacity(arity);
-                let mut labeling = Vec::with_capacity(arity);
-
-                let mut k_factor = 1;
-
-                for i in (0..arity).rev() {
-                    if let Some(label) = solution[i] {
-                        k += label * k_factor
-                    } else {
-                        solution[i] = Some(0);
-                        k_array.push(self.relaxation.cfn().domain_size(i));
-                        k_factor_array.push(k_factor);
-                        index_array.push(i);
-                        labeling.push(0);
-                    }
-                    k_factor *= self.relaxation.cfn().domain_size(i);
-                }
-
-                let n = labeling.len();
-
-                if n == arity {
-                    // Everything is unlabeled
-                    let mut k_best = theta_star.index_min();
-                    for i in (0..arity).rev() {
-                        solution[i] = Some(k_best % self.relaxation.cfn().domain_size(i));
-                        if i == 0 {
-                            return;
-                        }
-                        k_best /= self.relaxation.cfn().domain_size(i);
-                    }
-                }
-
-                let mut v_best = theta_star[k];
-                let mut i = 0;
-                loop {
-                    if labeling[i] < k_array[i] - 1 {
-                        labeling[i] += 1;
-                        k += k_factor_array[i];
-                        if v_best > theta_star[k] {
-                            v_best = theta_star[k];
-                            for j in 0..n {
-                                solution[index_array[j]] = Some(labeling[j]);
-                            }
-                        }
-                        i = 0;
-                    } else {
-                        k -= labeling[i] * k_factor_array[i];
-                        labeling[i] = 0;
-                        i += 1;
-                        if i == n {
-                            break;
-                        }
-                    }
-                }
+                theta_star.update_solution_restricted_minimum(
+                    self.relaxation.cfn(),
+                    beta_origin,
+                    solution,
+                );
             }
         }
     }
@@ -316,7 +259,7 @@ impl<'a> SRMP<'a> {
 
     fn init_solution(&mut self, compute_solution: bool) -> Option<Solution> {
         match compute_solution {
-            true => Some(Solution::new(self.relaxation.cfn())),
+            true => Some(Solution::new(self.relaxation.cfn().num_variables())),
             false => None,
         }
     }
@@ -340,7 +283,6 @@ impl<'a> Solver<'a> for SRMP<'a> {
         // Compute initial lower bound
         let mut initial_lower_bound = 0.;
         for node_index in relaxation
-            .graph()
             .node_indices()
             .filter(|node_index| !relaxation.has_edges(*node_index, Outgoing))
         {
@@ -366,53 +308,52 @@ impl<'a> Solver<'a> for SRMP<'a> {
 
         let mut best_solution = None;
         let mut best_cost = 0.;
+        let mut forward_cost = 0.;
+        let mut backward_cost = 0.;
 
         loop {
+            // Forward pass
             let previous_lower_bound = self.initial_lower_bound;
-
             let mut forward_solution = self.init_solution(compute_solution);
             self.forward_pass(&mut forward_solution);
             if let Some(solution) = forward_solution {
-                let cost = self.relaxation.cfn().cost(&solution);
-
-                if log_enabled!(Level::Info) {
-                    info!("Forward cost: {}\nForward solution: {:#?}", cost, solution);
-                }
-
-                if best_solution.is_none() || best_cost > cost {
-                    best_cost = cost;
+                info!("Forward cost: {}. Forward solution {:#?}.", forward_cost, solution);
+                forward_cost = self.relaxation.cfn().cost(&solution);
+                if best_solution.is_none() || best_cost > forward_cost {
+                    best_cost = forward_cost;
                     best_solution = Some(solution);
                 }
             }
 
+            // Backward pass
             let mut backward_solution = self.init_solution(compute_solution);
             current_lower_bound = self.backward_pass(&mut backward_solution);
             if let Some(solution) = backward_solution {
-                let cost = self.relaxation.cfn().cost(&solution);
-
-                if log_enabled!(Level::Info) {
-                    info!(
-                        "Backward cost: {}\nBackward solution: {:#?}",
-                        cost, solution
-                    );
-                }
-
-                if best_solution.is_none() || best_cost > cost {
-                    best_cost = cost;
+                backward_cost = self.relaxation.cfn().cost(&solution);
+                info!("Backward cost: {}. Backward solution {:#?}.", backward_cost, solution);
+                if best_solution.is_none() || best_cost > backward_cost {
+                    best_cost = forward_cost;
                     best_solution = Some(solution);
                 }
             }
 
-            // todo: logging (iteration number, elapsed time, lower bound, cost forward, cost backward)
+            // Logging
+            let elapsed_time = time_start.elapsed();
+            if compute_solution {
+                info!("Iteration {}. Elapsed time {:?}", iteration, elapsed_time);
+                // todo: info!("Iteration {}. Elapsed time {:?}. Forward cost {}. Forward solution {:#?}. Baclward cost: {}. Backward solution {:#?}.", iteration, elapsed_time, forward_cost, forward_solution.unwrap(), backward_cost, backward_solution.unwrap());
+            } else {
+                info!("Iteration {}. Elapsed time {:?}", iteration, elapsed_time);
+            }
 
+            // Advance to next iteration
             iteration += 1;
-
             iter_solution -= compute_solution as usize * options.compute_solution_period();
             iter_solution += 1;
             compute_solution = (iter_solution == options.compute_solution_period())
                 || (iteration + 1 == options.max_iterations());
 
-            let elapsed_time = time_start.elapsed();
+            // Break if stopping a condition is satisfied
             if iteration >= options.max_iterations()
                 || current_lower_bound < previous_lower_bound + options.eps()
                 || elapsed_time >= options.time_max()

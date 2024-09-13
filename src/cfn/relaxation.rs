@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 
 use log::debug;
-use petgraph::graph::{DiGraph, EdgeIndex, EdgeReferences, Edges, Neighbors, NodeIndex};
+use petgraph::graph::{
+    DiGraph, EdgeIndex, EdgeReferences, Edges, Neighbors, NodeIndex, NodeIndices,
+};
 use petgraph::Directed;
 use petgraph::Direction::{self};
 
@@ -26,9 +28,8 @@ impl<'a> Relaxation<'a> {
         self.graph.edge_references()
     }
 
-    // todo: remove from SRMP
-    pub fn graph(&self) -> &RelaxationGraph {
-        &self.graph
+    pub fn node_indices(&self) -> NodeIndices<usize> {
+        self.graph.node_indices()
     }
 
     pub fn node_count(&self) -> usize {

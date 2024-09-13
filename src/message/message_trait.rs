@@ -52,4 +52,11 @@ pub trait Message: Index<usize> + IndexMut<usize> {
         alpha: &FactorOrigin,
         beta: &FactorOrigin,
     ) -> Self;
+
+    fn update_solution_restricted_minimum(
+        &self,
+        cfn: &CostFunctionNetwork,
+        beta: &FactorOrigin,
+        solution: &mut Solution,
+    );
 }

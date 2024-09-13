@@ -5,30 +5,32 @@
 ├───cfn
 │       cost_function_network.rs [v] (looks correct based on close inspection during revision, low testing priority)
 │       relaxation.rs
-│       solution.rs
-│       solver.rs
+│       solution.rs (very straightforward, looks correct, low testing priority)
+│       solver.rs (very straightforward, looks correct, low testing priority)
 │       srmp.rs
 │       uai.rs [v] (looks correct based on close inspection during revision, low testing priority)
 │
-├───csp
-│       ac3.rs
-│       binary_csp.rs
+├───csp (no, focus on SRMP for now)
+│       ac3.rs (no, focus on SRMP for now)
+│       binary_csp.rs (no, focus on SRMP for now)
 │
 ├───data_structures
 │       hypergraph.rs (very straightforward, looks correct, low testing priority)
-│       jagged_arrays.rs (only used in binary csp at the moment)
+│       jagged_arrays.rs (no, only used in binary csp at the moment)
 │
 ├───factor_types
-│       factor_trait.rs
+│       factor_trait.rs (very straightforward, looks correct, low testing priority) -- careful with Index and IndexMut, this is an implicit assumption about how factors are currently implemented
 │       factor_type.rs
-│       general_factor.rs
-│       unary_factor.rs
+│       general_factor.rs (pretty straightforward, looks correct, low testing priority) -- careful with Index and IndexMut, this is an implicit assumption about how factors are currently implemented
+│       unary_factor.rs (pretty straightforward, looks correct, low testing priority) -- careful with Index and IndexMut, this is an implicit assumption about how factors are currently implemented
 │
 └───message
         messages.rs [v] (started writing tests)
         message_general.rs
         message_trait.rs
-        message_type.rs
+        message_type.rs (currently unused)
+
+- README.rs
 
 # Testing
 

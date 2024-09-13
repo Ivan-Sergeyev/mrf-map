@@ -20,6 +20,29 @@ pub struct GeneralAlignment {
 }
 
 impl GeneralAlignment {
+    fn compute_strides(
+        cfn: &CostFunctionNetwork,
+        alpha_variables: &Vec<usize>,
+        beta_variables: &Vec<usize>,
+    ) -> Vec<usize> {
+        let beta_arity = beta_variables.len();
+        let mut strides = vec![0; beta_arity + 1];
+        strides[beta_arity] = 1; // barrier element
+        let mut alpha_var_rev_iter = alpha_variables.iter().rev().peekable();
+
+        for (beta_var_idx, beta_var) in beta_variables.iter().rev().enumerate() {
+            let stride_index = beta_arity - 1 - beta_var_idx;
+            strides[stride_index] = strides[stride_index + 1];
+            while alpha_var_rev_iter
+                .peek()
+                .is_some_and(|alpha_var| *beta_var != **alpha_var)
+            {
+                strides[stride_index] *= cfn.domain_size(*alpha_var_rev_iter.next().unwrap());
+            }
+        }
+        strides
+    }
+
     fn compute_index_adjustment(
         cfn: &CostFunctionNetwork,
         alpha_variables: &Vec<usize>,
@@ -31,20 +54,7 @@ impl GeneralAlignment {
             alpha_variables, beta_variables
         );
 
-        let mut k_array = vec![0; beta_variables.len() + 1];
-        k_array[beta_variables.len()] = 1; // barrier element
-        let mut alpha_var_idx = alpha_variables.len() - 1;
-        for (beta_var_idx, &beta_var) in beta_variables.iter().rev().enumerate() {
-            debug!("beta_var_idx {}, beta_var {}", beta_var_idx, beta_var);
-            k_array[beta_var_idx] = k_array[beta_var_idx + 1];
-            while beta_var != alpha_variables[alpha_var_idx] {
-                k_array[beta_var_idx] *= cfn.domain_size(alpha_variables[alpha_var_idx]);
-                if alpha_var_idx == 0 {
-                    break;
-                }
-                alpha_var_idx -= 1;
-            }
-        }
+        let strides = GeneralAlignment::compute_strides(&cfn, &alpha_variables, &beta_variables);
 
         let mut beta_labeling = vec![0; beta_variables.len()];
         let mut index_adjustment_table = vec![0; beta_function_table_len];
@@ -57,13 +67,13 @@ impl GeneralAlignment {
             if beta_labeling[beta_var_idx] < cfn.domain_size(beta_variables[beta_var_idx]) - 1 {
                 // "Advance" to next label
                 beta_labeling[beta_var_idx] += 1;
-                k += k_array[beta_var_idx];
+                k += strides[beta_var_idx];
                 table_idx += 1;
                 index_adjustment_table[table_idx] = k;
                 beta_var_idx = beta_var_idx_start;
             } else {
                 // "Carry over" to initial label
-                k -= beta_labeling[beta_var_idx] * k_array[beta_var_idx];
+                k -= beta_labeling[beta_var_idx] * strides[beta_var_idx];
                 beta_labeling[beta_var_idx] = 0;
                 if beta_var_idx == 0 {
                     break;
@@ -282,6 +292,73 @@ impl Message for GeneralMessage {
         }
         theta_beta
     }
+
+    fn update_solution_restricted_minimum(
+        &self,
+        cfn: &CostFunctionNetwork,
+        beta: &FactorOrigin,
+        solution: &mut Solution,
+    ) {
+        let arity = cfn.arity(beta);
+
+        let mut k = 0;
+        let mut k_factor_array = Vec::with_capacity(arity);
+        let mut k_array = Vec::with_capacity(arity);
+        let mut index_array = Vec::with_capacity(arity);
+        let mut labeling = Vec::with_capacity(arity);
+
+        let mut k_factor = 1;
+
+        for i in (0..arity).rev() {
+            if let Some(label) = solution[i] {
+                k += label * k_factor
+            } else {
+                solution[i] = Some(0);
+                k_array.push(cfn.domain_size(i));
+                k_factor_array.push(k_factor);
+                index_array.push(i);
+                labeling.push(0);
+            }
+            k_factor *= cfn.domain_size(i);
+        }
+
+        let n = labeling.len();
+
+        if n == arity {
+            // Everything is unlabeled
+            let mut k_best = self.index_min();
+            for i in (0..arity).rev() {
+                solution[i] = Some(k_best % cfn.domain_size(i));
+                if i == 0 {
+                    return;
+                }
+                k_best /= cfn.domain_size(i);
+            }
+        }
+
+        let mut v_best = self.value[k];
+        let mut i = 0;
+        loop {
+            if labeling[i] < k_array[i] - 1 {
+                labeling[i] += 1;
+                k += k_factor_array[i];
+                if v_best > self.value[k] {
+                    v_best = self.value[k];
+                    for j in 0..n {
+                        solution[index_array[j]] = Some(labeling[j]);
+                    }
+                }
+                i = 0;
+            } else {
+                k -= labeling[i] * k_factor_array[i];
+                labeling[i] = 0;
+                i += 1;
+                if i == n {
+                    break;
+                }
+            }
+        }
+    }
 }
 
 impl Index<usize> for GeneralMessage {
@@ -322,27 +399,30 @@ impl GeneralMessage {
     }
 }
 
-// impl From<GeneralFactor> for GeneralMessage {
-//     fn from(value: GeneralFactor) -> Self {
-//         GeneralMessage {
-//             value: value.function_table.into_iter().collect(),
-//         }
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-// impl From<UnaryFactor> for GeneralMessage {
-//     fn from(value: UnaryFactor) -> Self {
-//         GeneralMessage {
-//             value: value.function_table.into_iter().collect(),
-//         }
-//     }
-// }
+    #[test]
+    fn compute_index_adjustment() {
+        let domain_sizes = vec![3, 4, 5];
+        let alpha_variables = vec![0, 1, 2];
+        let beta_variables = vec![1];
 
-// impl From<FactorType> for GeneralMessage {
-//     fn from(value: FactorType) -> Self {
-//         match value {
-//             FactorType::Unary(unary_factor) => unary_factor.into(),
-//             FactorType::General(general_factor) => general_factor.into(),
-//         }
-//     }
-// }
+        let mut cfn = CostFunctionNetwork::from_domain_sizes(&domain_sizes, false, 0);
+        cfn.add_non_unary_factor(alpha_variables, FactorType::General(vec![0.; 1].into()));
+        cfn.add_unary_factor(beta_variables[0], vec![0.; 1].into());
+
+        let alpha_origin = FactorOrigin::NonUnary(0);
+        let beta_origin = FactorOrigin::Variable(beta_variables[0]);
+
+        let alignment = GeneralAlignment::new(&cfn, &alpha_origin, &beta_origin);
+        let expected = GeneralAlignment {
+            first_align: vec![0, 5, 10, 15],
+            second_align: vec![0, 1, 2, 3, 4, 20, 21, 22, 23, 24, 40, 41, 42, 43, 44],
+        };
+
+        assert_eq!(alignment.first_align, expected.first_align);
+        assert_eq!(alignment.second_align, expected.second_align);
+    }
+}

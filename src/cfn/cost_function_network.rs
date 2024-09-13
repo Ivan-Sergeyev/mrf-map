@@ -491,7 +491,7 @@ impl UAI for CostFunctionNetwork {
                 }
                 UAIState::TableValues(function_idx, cur_entries, num_entries) => {
                     debug!(
-                        "Reading values of function {}, done {} out of {}",
+                        "Reading function {}, collected {} out of {} entries",
                         function_idx, cur_entries, num_entries
                     );
                     assert!(function_idx < function_scopes.len());
@@ -507,7 +507,7 @@ impl UAI for CostFunctionNetwork {
                     }
 
                     debug!(
-                        "Saving function {} with {} entries",
+                        "Reading function {}, collected all {} entries, saving",
                         function_idx, num_entries
                     );
                     // Move values into a separate vectors

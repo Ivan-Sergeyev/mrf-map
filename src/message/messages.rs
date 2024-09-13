@@ -215,7 +215,7 @@ impl Messages {
         self.sub_all_outgoing_messages(relaxation, &mut reparam_beta, factor);
         for in_edge in relaxation.edges_directed(factor, Incoming) {
             let alpha = relaxation.factor_origin(in_edge.source());
-            let num_labeled = solution.num_labeled(relaxation.cfn(), alpha);
+            let num_labeled = solution.num_labeled(relaxation.cfn().factor_variables(alpha));
             if num_labeled > 0 && num_labeled < relaxation.cfn().arity(alpha) {
                 let restrected_message = self.send_restricted(relaxation, in_edge, solution);
                 reparam_beta.add_assign_incoming(&restrected_message);
@@ -286,7 +286,7 @@ mod tests {
         let relaxation = Relaxation::new(&cfn);
         let messages = Messages::new(&relaxation);
 
-        for factor in relaxation.graph().node_indices() {
+        for factor in relaxation.node_indices() {
             let reparam = messages.init_reparam(&relaxation, factor);
             let reparam_vec: Vec<f64> = reparam.iter().map(|val| *val).collect();
 
@@ -306,56 +306,77 @@ mod tests {
 
     #[test]
     fn add_all_incoming_messages() {
-        todo!();
+        let cfn = construct_cfn_example_1();
+        let relaxation = Relaxation::new(&cfn);
+        let mut messages = Messages::new(&relaxation);
+        for message in messages.messages.iter_mut() {
+            message.add_assign_scalar(1.);
+        }
+
+        for factor in relaxation.node_indices() {
+            let mut reparam = messages.init_reparam(&relaxation, factor);
+            let before_vec: Vec<f64> = reparam.iter().map(|value| *value).collect();
+            messages.add_all_incoming_messages(&relaxation, &mut reparam, factor);
+
+            let diff: Vec<f64> = reparam
+                .iter()
+                .zip(before_vec.iter())
+                .map(|(after, before)| after - before)
+                .collect();
+
+            let expected_value = relaxation.edges_directed(factor, Incoming).count() as f64;
+            let expected_size = cfn.max_function_table_size(relaxation.factor_origin(factor));
+            assert_eq!(diff, vec![expected_value; expected_size]);
+        }
     }
 
-    #[test]
-    fn sub_all_outgoing_messages() {
-        todo!();
-    }
+    // #[test]
+    // fn sub_all_outgoing_messages() {
+    //     todo!();
+    // }
 
-    #[test]
-    fn sub_all_other_outgoing_messages() {
-        todo!();
-    }
+    // #[test]
+    // fn sub_all_other_outgoing_messages() {
+    //     todo!();
+    // }
 
-    #[test]
-    fn subtract_all_other_outgoing_messages_alt() {
-        todo!();
-    }
+    // #[test]
+    // fn subtract_all_other_outgoing_messages_alt() {
+    //     todo!();
+    // }
 
-    #[test]
-    fn update_and_normalize() {
-        todo!();
-    }
+    // #[test]
+    // fn update_and_normalize() {
+    //     todo!();
+    // }
 
-    #[test]
-    fn send() {
-        todo!();
-    }
+    // #[test]
+    // fn send() {
+    //     todo!();
+    // }
 
-    #[test]
-    fn compute_reparam() {
-        todo!();
-    }
+    // #[test]
+    // fn compute_reparam() {
+    //     todo!();
+    // }
 
-    #[test]
-    fn sub_assign_reparam() {
-        todo!();
-    }
+    // #[test]
+    // fn sub_assign_reparam() {
+    //     todo!();
+    // }
 
-    #[test]
-    fn send_srmp_initial() {
-        todo!();
-    }
+    // #[test]
+    // fn send_srmp_initial() {
+    //     todo!();
+    // }
 
-    #[test]
-    fn send_restricted() {
-        todo!();
-    }
+    // #[test]
+    // fn send_restricted() {
+    //     todo!();
+    // }
 
-    #[test]
-    fn compute_restricted_reparam() {
-        todo!();
-    }
+    // #[test]
+    // fn compute_restricted_reparam() {
+    //     todo!();
+    // }
 }
