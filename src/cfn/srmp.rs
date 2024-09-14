@@ -4,7 +4,7 @@ use std::{cmp::max, time::Instant};
 
 use bitvec::prelude::LocalBits;
 use bitvec::vec::BitVec;
-use log::{debug, info, log_enabled, Level};
+use log::{debug, info};
 use petgraph::{
     graph::NodeIndex,
     visit::EdgeRef,
@@ -178,7 +178,7 @@ impl<'a> SRMP<'a> {
             FactorOrigin::Variable(node_index) => {
                 solution[*node_index] = Some(theta_star.index_min())
             }
-            FactorOrigin::NonUnary(_hyperedge_index) => {
+            FactorOrigin::NonUnaryFactor(_hyperedge_index) => {
                 theta_star.update_solution_restricted_minimum(
                     self.relaxation.cfn(),
                     beta_origin,
@@ -317,7 +317,10 @@ impl<'a> Solver<'a> for SRMP<'a> {
             let mut forward_solution = self.init_solution(compute_solution);
             self.forward_pass(&mut forward_solution);
             if let Some(solution) = forward_solution {
-                info!("Forward cost: {}. Forward solution {:#?}.", forward_cost, solution);
+                info!(
+                    "Forward cost: {}. Forward solution {:#?}.",
+                    forward_cost, solution
+                );
                 forward_cost = self.relaxation.cfn().cost(&solution);
                 if best_solution.is_none() || best_cost > forward_cost {
                     best_cost = forward_cost;
@@ -330,7 +333,10 @@ impl<'a> Solver<'a> for SRMP<'a> {
             current_lower_bound = self.backward_pass(&mut backward_solution);
             if let Some(solution) = backward_solution {
                 backward_cost = self.relaxation.cfn().cost(&solution);
-                info!("Backward cost: {}. Backward solution {:#?}.", backward_cost, solution);
+                info!(
+                    "Backward cost: {}. Backward solution {:#?}.",
+                    backward_cost, solution
+                );
                 if best_solution.is_none() || best_cost > backward_cost {
                     best_cost = forward_cost;
                     best_solution = Some(solution);

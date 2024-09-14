@@ -230,8 +230,7 @@ impl Messages {
 #[cfg(test)]
 mod tests {
     use crate::{
-        cfn::relaxation::ConstructRelaxation,
-        factor_types::{factor_type::FactorType, unary_factor::UnaryFactor},
+        cfn::relaxation::ConstructRelaxation, factor_types::factor_type::FactorType,
         CostFunctionNetwork,
     };
 
@@ -239,18 +238,8 @@ mod tests {
 
     fn construct_cfn_example_1() -> CostFunctionNetwork {
         let mut cfn = CostFunctionNetwork::from_domain_sizes(&vec![3, 4, 5], false, 3);
-        cfn.add_unary_factor(
-            0,
-            UnaryFactor {
-                function_table: vec![1., 2., 3.],
-            },
-        );
-        cfn.add_unary_factor(
-            2,
-            UnaryFactor {
-                function_table: vec![11., 12., 13., 14., 15.],
-            },
-        );
+        cfn.add_unary_factor(0, FactorType::Unary(vec![1., 2., 3.].into()));
+        cfn.add_unary_factor(2, FactorType::Unary(vec![11., 12., 13., 14., 15.].into()));
         cfn.add_non_unary_factor(vec![0, 1], FactorType::General(vec![4.; 3 * 4].into()));
         cfn.add_non_unary_factor(vec![0, 2], FactorType::General(vec![5.; 3 * 5].into()));
         cfn.add_non_unary_factor(vec![1, 2], FactorType::General(vec![6.; 4 * 5].into()));
@@ -274,7 +263,7 @@ mod tests {
                 .collect();
 
             let factor_origin = relaxation.factor_origin(edge.target());
-            let max_function_table_size = relaxation.cfn().max_function_table_size(factor_origin);
+            let max_function_table_size = relaxation.cfn().full_function_table_size(factor_origin);
 
             assert_eq!(message_vec, vec![0.; max_function_table_size]);
         }
@@ -291,7 +280,7 @@ mod tests {
             let reparam_vec: Vec<f64> = reparam.iter().map(|val| *val).collect();
 
             let factor_origin = relaxation.factor_origin(factor);
-            let max_function_table_size = relaxation.cfn().max_function_table_size(factor_origin);
+            let max_function_table_size = relaxation.cfn().full_function_table_size(factor_origin);
             let factor_type = relaxation.cfn().get_factor(factor_origin);
             let factor_vec: Vec<f64> = match factor_type {
                 Some(factor_type) => (0..max_function_table_size)
@@ -325,7 +314,7 @@ mod tests {
                 .collect();
 
             let expected_value = relaxation.edges_directed(factor, Incoming).count() as f64;
-            let expected_size = cfn.max_function_table_size(relaxation.factor_origin(factor));
+            let expected_size = cfn.full_function_table_size(relaxation.factor_origin(factor));
             assert_eq!(diff, vec![expected_value; expected_size]);
         }
     }

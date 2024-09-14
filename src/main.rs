@@ -3,7 +3,6 @@
 // [example 2](https://samkeen.dev/logging-in-rust-a-beginners-guide)
 
 mod data_structures {
-    pub mod hypergraph;
     pub mod jagged_arrays;
 }
 

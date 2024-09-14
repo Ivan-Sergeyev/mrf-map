@@ -47,7 +47,7 @@ impl<'a> Relaxation<'a> {
     pub fn is_unary_factor(&self, node: NodeIndex<usize>) -> bool {
         match self.factor_origin(node) {
             RNodeData::Variable(_) => true,
-            RNodeData::NonUnary(_) => false,
+            RNodeData::NonUnaryFactor(_) => false,
         }
     }
 
@@ -95,15 +95,11 @@ impl<'a> ConstructRelaxation<'a, MinimalEdges> for Relaxation<'a> {
         debug!("Constructing new MinimalEdges relaxation");
 
         // Create an empty directed graph with reserved capacity for nodes and edg
-        let edge_capacity = cfn
-            .factor_origins_iter()
-            .map(|factor_origin| cfn.arity(factor_origin))
-            .filter(|arity| *arity > 1)
-            .sum();
+        let edge_capacity = (0..cfn.num_non_unary_factors()).map(|non_unary_factor_index| cfn.factor_variables(&FactorOrigin::NonUnaryFactor(non_unary_factor_index)).len()).sum();
         let mut graph = DiGraph::with_capacity(cfn.factors_len(), edge_capacity);
 
         let mut unary_nodes = Vec::with_capacity(cfn.factors_len());
-        let mut non_unary_nodes = Vec::with_capacity(cfn.num_hyperedges());
+        let mut non_unary_nodes = Vec::with_capacity(cfn.num_non_unary_factors());
 
         // Add nodes corresponding to original variables
         for variable in 0..cfn.num_variables() {
@@ -113,23 +109,24 @@ impl<'a> ConstructRelaxation<'a, MinimalEdges> for Relaxation<'a> {
             });
         }
 
-        for hyperedge in 0..cfn.num_hyperedges() {
+        for non_unary_factor_index in 0..cfn.num_non_unary_factors() {
             // Add a node corresponding to this non-unary factor
-            non_unary_nodes.push(graph.add_node(RNodeData::NonUnary(hyperedge)));
-            let new_node = non_unary_nodes[hyperedge];
-            debug!("Added non-unary factor {} as node {}", { hyperedge }, {
+            non_unary_nodes.push(graph.add_node(RNodeData::NonUnaryFactor(non_unary_factor_index)));
+            let new_node = non_unary_nodes[non_unary_factor_index];
+            debug!("Added non-unary factor {} as node {}", { non_unary_factor_index }, {
                 new_node.index()
             });
+            let non_unary_factor_origin = FactorOrigin::NonUnaryFactor(non_unary_factor_index);
 
             // Add edges from this factor's node to the nodes of all its endpoints
-            for variable in cfn.hyperedge_variables(hyperedge) {
+            for variable in cfn.factor_variables(&non_unary_factor_origin) {
                 let variable_node = unary_nodes[*variable];
                 debug!(
                     "Adding edge from node {} to node {}",
                     new_node.index(),
                     variable_node.index()
                 );
-                let alpha = RNodeData::NonUnary(hyperedge);
+                let alpha = RNodeData::NonUnaryFactor(non_unary_factor_index);
                 let beta = RNodeData::Variable(*variable);
                 let weight = REdgeData::new(&cfn, &alpha, &beta);
                 graph.add_edge(new_node, variable_node, weight);

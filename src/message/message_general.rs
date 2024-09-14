@@ -89,8 +89,8 @@ impl GeneralAlignment {
         let alpha_variables = cfn.factor_variables(alpha);
         let beta_variables = cfn.factor_variables(beta);
         let diff_variables = cfn.get_variables_difference(alpha, beta);
-        let alpha_ft_len = cfn.max_function_table_size(alpha);
-        let beta_ft_len = cfn.max_function_table_size(beta);
+        let alpha_ft_len = cfn.full_function_table_size(alpha);
+        let beta_ft_len = cfn.full_function_table_size(beta);
         let diff_ft_len = alpha_ft_len / beta_ft_len;
 
         let first_align =
@@ -411,9 +411,9 @@ mod tests {
 
         let mut cfn = CostFunctionNetwork::from_domain_sizes(&domain_sizes, false, 0);
         cfn.add_non_unary_factor(alpha_variables, FactorType::General(vec![0.; 1].into()));
-        cfn.add_unary_factor(beta_variables[0], vec![0.; 1].into());
+        cfn.add_unary_factor(beta_variables[0], FactorType::Unary(vec![0.; 1].into()));
 
-        let alpha_origin = FactorOrigin::NonUnary(0);
+        let alpha_origin = FactorOrigin::NonUnaryFactor(0);
         let beta_origin = FactorOrigin::Variable(beta_variables[0]);
 
         let alignment = GeneralAlignment::new(&cfn, &alpha_origin, &beta_origin);

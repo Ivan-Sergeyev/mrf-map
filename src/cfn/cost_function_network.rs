@@ -11,58 +11,55 @@ use std::{
 use log::{debug, warn};
 
 use crate::{
-    data_structures::hypergraph::Hypergraph,
     factor_types::{factor_trait::Factor, factor_type::FactorType},
     message::message_general::GeneralMessage,
 };
 
-use std::slice::Iter;
-
-use crate::{
-    cfn::uai::UAIState, data_structures::hypergraph::UndirectedHypergraph,
-    factor_types::unary_factor::UnaryFactor,
-};
+use crate::cfn::uai::UAIState;
 
 use super::{solution::Solution, uai::UAI};
 
+type VariableIndex = usize;
+type NonUnaryFactorIndex = usize;
+
+pub enum FactorOrigin {
+    Variable(VariableIndex),
+    NonUnaryFactor(NonUnaryFactorIndex),
+}
+
 // Stores information about a variable in the cost function network
 #[derive(Debug)]
-pub struct CFNVariable {
+pub struct Variable {
     variable: Vec<usize>, // single-element vec containing the index of this variable
     domain_size: usize,   // the domain size of this variable
-    factor_index: Option<usize>, // the index of the corresponding unary factor in the `factors` vec (if it exits)
+    factor_index: Option<usize>, // the index of the corresponding unary factor in `factors` (if it exits)
+    in_non_unary_factors: Vec<NonUnaryFactorIndex>, // indices of non-unary factors that include this variable
 }
 
 // Stores information about a non-unary factor
 #[derive(Debug)]
-pub struct CFNNonUnaryFactor {
-    max_function_table_size: usize, // the product of domain sizes of associated variables
-    factor_index: Option<usize>, // the index of the corresponding non-unary factor in the `factors` vec (if it exists)
-}
-
-type HNodeIndex = usize;
-type HHyperedgeIndex = usize;
-
-pub enum FactorOrigin {
-    Variable(HNodeIndex),
-    NonUnary(HHyperedgeIndex),
+pub struct NonUnaryFactor {
+    full_function_table_size: usize, // the product of domain sizes of associated variables
+    factor_index: Option<usize>, // the index of the corresponding non-unary factor in `factors` (if it exists)
+    variables: Vec<VariableIndex>, // indices of variables included in this factor
 }
 
 // Stores the cost function network
 pub struct CostFunctionNetwork {
-    hypergraph: UndirectedHypergraph<CFNVariable, CFNNonUnaryFactor>, // stores the structure of the network,
-    // namely relations between factors with variables, together with the information in the corresponding data structs
-    factors: Vec<FactorType>, // contains numerical representations of all factors
-    factor_origins: Vec<FactorOrigin>, // indicates what each factor corresponds to in `hypergraph` (node or hyperedge)
+    variables: Vec<Variable>, // stores structural information about variables in the network
+    non_unary_factors: Vec<NonUnaryFactor>, // stores structural information about non-unary factors in the network
+    factors: Vec<FactorType>,               // contains numerical representations of all factors
+    origins: Vec<FactorOrigin>, // indicates where structural information for each factor is stored
 }
 
 impl CostFunctionNetwork {
     // Creates an empty cost function network
     pub fn new() -> Self {
         CostFunctionNetwork {
-            hypergraph: UndirectedHypergraph::with_capacity(0, 0),
+            variables: Vec::new(),
+            non_unary_factors: Vec::new(),
             factors: Vec::new(),
-            factor_origins: Vec::new(),
+            origins: Vec::new(),
         }
     }
 
@@ -70,9 +67,10 @@ impl CostFunctionNetwork {
     pub fn with_capacity(capacity_unary: usize, capacity_non_unary: usize) -> Self {
         let reserve_capacity = capacity_unary + capacity_non_unary;
         CostFunctionNetwork {
-            hypergraph: UndirectedHypergraph::with_capacity(capacity_unary, capacity_non_unary),
+            variables: Vec::with_capacity(capacity_unary),
+            non_unary_factors: Vec::with_capacity(capacity_non_unary),
             factors: Vec::with_capacity(reserve_capacity),
-            factor_origins: Vec::with_capacity(reserve_capacity),
+            origins: Vec::with_capacity(reserve_capacity),
         }
     }
 
@@ -84,21 +82,23 @@ impl CostFunctionNetwork {
         reserve_unary: bool,
         capacity_non_unary: usize,
     ) -> Self {
-        let node_data: Vec<CFNVariable> = domain_sizes // todo: remove type annotations?
+        let variables: Vec<Variable> = domain_sizes // todo: remove type annotations?
             .iter()
             .enumerate()
-            .map(|(index, domain_size)| CFNVariable {
+            .map(|(index, domain_size)| Variable {
                 variable: vec![index],
                 domain_size: *domain_size,
                 factor_index: None,
+                in_non_unary_factors: Vec::new(),
             })
             .collect();
-        let reserve_capacity = (reserve_unary as usize) * node_data.len() + capacity_non_unary;
+        let reserve_capacity = (reserve_unary as usize) * variables.len() + capacity_non_unary;
 
         CostFunctionNetwork {
-            hypergraph: UndirectedHypergraph::from_node_data(node_data, 0),
+            variables: variables,
+            non_unary_factors: Vec::with_capacity(capacity_non_unary),
             factors: Vec::with_capacity(reserve_capacity),
-            factor_origins: Vec::with_capacity(reserve_capacity),
+            origins: Vec::with_capacity(reserve_capacity),
         }
     }
 
@@ -108,13 +108,14 @@ impl CostFunctionNetwork {
         unary_function_tables: Vec<Vec<f64>>,
         capacity_non_unary: usize,
     ) -> Self {
-        let node_data = unary_function_tables
+        let variables = unary_function_tables
             .iter()
             .enumerate()
-            .map(|(index, unary_function_table)| CFNVariable {
+            .map(|(index, unary_function_table)| Variable {
                 variable: vec![index],
                 domain_size: unary_function_table.len(),
                 factor_index: Some(index),
+                in_non_unary_factors: Vec::new(),
             })
             .collect();
 
@@ -130,16 +131,18 @@ impl CostFunctionNetwork {
         factors.reserve(capacity_non_unary);
 
         CostFunctionNetwork {
-            hypergraph: UndirectedHypergraph::from_node_data(node_data, capacity_non_unary),
+            variables: variables,
+            non_unary_factors: Vec::with_capacity(capacity_non_unary),
             factors,
-            factor_origins,
+            origins: factor_origins,
         }
     }
 
     // Reserves capacity for at least `additional` more non-unary factors
     pub fn reserve(&mut self, additional: usize) -> &mut Self {
+        self.non_unary_factors.reserve(additional);
         self.factors.reserve(additional);
-        self.factor_origins.reserve(additional);
+        self.origins.reserve(additional);
         self
     }
 
@@ -157,27 +160,27 @@ impl CostFunctionNetwork {
         variables
             .iter()
             .fold(1, |product, variable| product * self.domain_size(*variable))
-        // alternative:
-        // todo: bench both functions to find which implementation is faster
     }
 
     // Adds a unary factor (assuming it does not already exist)
-    pub fn add_unary_factor(&mut self, variable: usize, factor: UnaryFactor) -> &mut Self {
-        // Assumption: `variable` does not have a unary factor associated with it
+    pub fn add_unary_factor(&mut self, variable: usize, factor: FactorType) -> &mut Self {
+        // Assumptions:
+        // - `variable` does not have a unary factor associated with it
+        // - `factor` has arity 1
         assert!(
-            self.hypergraph.node_data(variable).factor_index.is_none(),
-            "Variable has no associated unary factor"
+            self.variables[variable].factor_index.is_none(),
+            "Variable already has an associated unary factor."
         );
-        self.hypergraph.node_data_mut(variable).factor_index = Some(self.factors.len());
-        self.factors.push(FactorType::Unary(factor));
-        self.factor_origins.push(FactorOrigin::Variable(variable));
+        self.variables[variable].factor_index = Some(self.factors.len());
+        self.factors.push(factor);
+        self.origins.push(FactorOrigin::Variable(variable));
         self
     }
 
     // Sets a unary factor of a given variable (overwrites it if it already exists, or adds a new one if it does not)
-    pub fn set_unary_factor(&mut self, variable: usize, factor: UnaryFactor) -> &mut Self {
-        if let Some(unary_factor_index) = self.hypergraph.node_data(variable).factor_index {
-            self.factors[unary_factor_index] = FactorType::Unary(factor);
+    pub fn set_unary_factor(&mut self, variable: usize, factor: FactorType) -> &mut Self {
+        if let Some(unary_factor_index) = self.variables[variable].factor_index {
+            self.factors[unary_factor_index] = factor;
             self
         } else {
             self.add_unary_factor(variable, factor)
@@ -188,29 +191,42 @@ impl CostFunctionNetwork {
     pub fn add_non_unary_factor(&mut self, variables: Vec<usize>, factor: FactorType) -> &mut Self {
         // Assumptions:
         // - `variables` is sorted in increasing order
-        // - `non_unary_factor` is not Unary
-        let hyperedge_data = CFNNonUnaryFactor {
-            max_function_table_size: self.product_domain_sizes(&variables),
+        // - `variables` has at least 2 elements
+        // - `factor` has arity equal to len of `variables`
+        assert!(
+            variables.len() >= 2,
+            "A non-unary factor must have at least 2 variables."
+        );
+        assert!(
+            variables.windows(2).all(|w| w[0] < w[1]),
+            "Variables in a non-unary factor must be distinct and sorted in increasing order."
+        );
+
+        let new_non_unary_factor_index = self.factors.len();
+        for variable in &variables {
+            self.variables[*variable]
+                .in_non_unary_factors
+                .push(new_non_unary_factor_index);
+        }
+        self.non_unary_factors.push(NonUnaryFactor {
+            full_function_table_size: self.product_domain_sizes(&variables),
             factor_index: Some(self.factors.len()),
-        };
-        let hyperedge_index = self.hypergraph.add_hyperedge(variables, hyperedge_data);
+            variables,
+        });
         self.factors.push(factor);
-        self.factor_origins
-            .push(FactorOrigin::NonUnary(hyperedge_index));
+        self.origins
+            .push(FactorOrigin::NonUnaryFactor(new_non_unary_factor_index));
         self
     }
 
     // Sets a non-unary factor (overwrites it if it already exsits, or adds a new one if it does not)
-    pub fn set_non_unary_factor(
-        &mut self,
-        variables: Vec<usize>,
-        non_unary_factor: FactorType,
-    ) -> &mut Self {
+    pub fn set_non_unary_factor(&mut self, variables: Vec<usize>, factor: FactorType) -> &mut Self {
         // Assumptions:
         // - `variables` is sorted in increasing order
-        // - `non_unary_factor` is not Unary
+        // - `variables` has at least 2 elements
+        // - `factor` has arity equal to len of `variables`
         if true {
-            self.add_non_unary_factor(variables, non_unary_factor)
+            self.add_non_unary_factor(variables, factor)
         } else {
             // todo feature: if this factor already exists, overwrite it instead
             unimplemented!("Overwriting non-unary factors is not currently implemented");
@@ -221,40 +237,19 @@ impl CostFunctionNetwork {
     pub fn set_factor(&mut self, variables: Vec<usize>, factor: FactorType) -> &mut Self {
         // Assumption:
         // - `variables` is sorted in increasing order
-        // - arity of `factor` is the same as number of elements in `variables`
-        match factor {
-            FactorType::Unary(unary_factor) => {
-                assert_eq!(
-                    variables.len(),
-                    1,
-                    "More than one variable provided for setting unary factor"
-                );
-                self.set_unary_factor(variables[0], unary_factor)
-            }
+        // - `factor` has arity equal to len of `variables`
+        match variables.len() {
+            1 => self.set_unary_factor(variables[0], factor),
             _ => self.set_non_unary_factor(variables, factor),
         }
-    }
-
-    // Returns an iterator over factors
-    pub fn factors_iter(&self) -> Iter<FactorType> {
-        self.factors.iter()
-    }
-
-    // Returns an iterator over factor origins
-    pub fn factor_origins_iter(&self) -> Iter<FactorOrigin> {
-        self.factor_origins.iter()
     }
 
     // Returns a factor indicated by its origin (unary or non-unary)
     pub fn get_factor(&self, factor_origin: &FactorOrigin) -> Option<&FactorType> {
         match factor_origin {
-            FactorOrigin::Variable(node_index) => {
-                self.hypergraph.node_data(*node_index).factor_index
-            }
-            FactorOrigin::NonUnary(hyperedge_index) => {
-                self.hypergraph
-                    .hyperedge_data(*hyperedge_index)
-                    .factor_index
+            FactorOrigin::Variable(variable_index) => self.variables[*variable_index].factor_index,
+            FactorOrigin::NonUnaryFactor(non_unary_factor_index) => {
+                self.non_unary_factors[*non_unary_factor_index].factor_index
             }
         }
         .and_then(|factor_index| Some(&self.factors[factor_index]))
@@ -264,35 +259,29 @@ impl CostFunctionNetwork {
     pub fn arity(&self, factor_origin: &FactorOrigin) -> usize {
         match factor_origin {
             FactorOrigin::Variable(_) => 1,
-            FactorOrigin::NonUnary(hyperedge_index) => {
-                self.hyperedge_variables(*hyperedge_index).len()
-            }
+            FactorOrigin::NonUnaryFactor(non_unary_factor_index) => self.non_unary_factors
+                [*non_unary_factor_index]
+                .variables
+                .len(),
         }
     }
 
     // Returns variables associated with a given factor (unary or non-unary)
     pub fn factor_variables(&self, factor_origin: &FactorOrigin) -> &Vec<usize> {
         match factor_origin {
-            FactorOrigin::Variable(node_index) => &self.hypergraph.node_data(*node_index).variable,
-            FactorOrigin::NonUnary(hyperedge_index) => self.hyperedge_variables(*hyperedge_index),
+            FactorOrigin::Variable(variable_index) => &self.variables[*variable_index].variable,
+            FactorOrigin::NonUnaryFactor(non_unary_factor_index) => {
+                &self.non_unary_factors[*non_unary_factor_index].variables
+            }
         }
     }
 
-    // Returns variables associated with a given non-unary factor (indicated by its hyperedge index)
-    pub fn hyperedge_variables(&self, hyperedge_index: usize) -> &Vec<usize> {
-        self.hypergraph.hyperedge_endpoints(hyperedge_index)
-    }
-
     // Returns product of domain sizes of variables associated with a given factor (unary or non-unary)
-    pub fn max_function_table_size(&self, factor_origin: &FactorOrigin) -> usize {
+    pub fn full_function_table_size(&self, factor_origin: &FactorOrigin) -> usize {
         match factor_origin {
-            FactorOrigin::Variable(node_index) => {
-                self.hypergraph.node_data(*node_index).domain_size
-            }
-            FactorOrigin::NonUnary(hyperedge_index) => {
-                self.hypergraph
-                    .hyperedge_data(*hyperedge_index)
-                    .max_function_table_size
+            FactorOrigin::Variable(variable_index) => self.variables[*variable_index].domain_size,
+            FactorOrigin::NonUnaryFactor(non_unary_factor_index) => {
+                self.non_unary_factors[*non_unary_factor_index].full_function_table_size
             }
         }
     }
@@ -323,7 +312,7 @@ impl CostFunctionNetwork {
     pub fn new_zero_message(&self, factor_origin: &FactorOrigin) -> GeneralMessage {
         GeneralMessage::zero_from_size(
             self.get_factor(factor_origin),
-            self.max_function_table_size(factor_origin),
+            self.full_function_table_size(factor_origin),
         )
     }
 
@@ -331,7 +320,7 @@ impl CostFunctionNetwork {
     pub fn new_message_clone(&self, factor_origin: &FactorOrigin) -> GeneralMessage {
         GeneralMessage::clone_factor(
             self.get_factor(factor_origin),
-            self.max_function_table_size(factor_origin),
+            self.full_function_table_size(factor_origin),
         )
     }
 
@@ -345,17 +334,17 @@ impl CostFunctionNetwork {
 
     // Returns the number of variables in the cost function network
     pub fn num_variables(&self) -> usize {
-        self.hypergraph.num_nodes()
+        self.variables.len()
     }
 
     // Returns the domain size of a variable
     pub fn domain_size(&self, variable: usize) -> usize {
-        self.hypergraph.node_data(variable).domain_size
+        self.variables[variable].domain_size
     }
 
     // Returns the number of non-unary factors in the cost function network
-    pub fn num_hyperedges(&self) -> usize {
-        self.hypergraph.num_hyperedges()
+    pub fn num_non_unary_factors(&self) -> usize {
+        self.non_unary_factors.len()
     }
 
     // Returns the number of factors in the cost function network
@@ -369,22 +358,16 @@ impl CostFunctionNetwork {
         let mut cost = 0.;
 
         // Add costs of all unary factors (that exist)
-        for node_index in self.hypergraph.nodes_iter() {
-            let variable_data = self.hypergraph.node_data(node_index);
-            if let Some(index) = variable_data.factor_index {
-                cost += self.factors[index].cost(&self, solution, &variable_data.variable);
+        for variable in &self.variables {
+            if let Some(index) = variable.factor_index {
+                cost += self.factors[index].cost(&self, solution, &variable.variable);
             }
         }
 
         // Add costs of all non-unary factors (that exist)
-        for hyperedge_index in self.hypergraph.hyperedges_iter() {
-            let factor_data = self.hypergraph.hyperedge_data(hyperedge_index);
-            if let Some(index) = factor_data.factor_index {
-                cost += self.factors[index].cost(
-                    &self,
-                    solution,
-                    self.hypergraph.hyperedge_endpoints(hyperedge_index),
-                );
+        for non_unary_factor in &self.non_unary_factors {
+            if let Some(index) = non_unary_factor.factor_index {
+                cost += self.factors[index].cost(&self, solution, &non_unary_factor.variables);
             }
         }
 
@@ -567,14 +550,14 @@ impl UAI for CostFunctionNetwork {
         write!(file, "{}\n", self.factors_len())?;
 
         debug!("Writing function scopes");
-        for factor in &self.factor_origins {
+        for factor in &self.origins {
             // Number of variables, list of variables
             match factor {
-                FactorOrigin::Variable(node_index) => {
-                    write!(file, "1 {}\n", node_index)?;
+                FactorOrigin::Variable(variable_index) => {
+                    write!(file, "1 {}\n", variable_index)?;
                 }
-                FactorOrigin::NonUnary(hyperedge_index) => {
-                    let variables = self.hyperedge_variables(*hyperedge_index);
+                FactorOrigin::NonUnaryFactor(non_unary_factor_index) => {
+                    let variables = &self.non_unary_factors[*non_unary_factor_index].variables;
                     let num_variables = variables.len();
                     write!(file, "{} {}\n", num_variables, vec_to_string(variables))?;
                 }
@@ -582,7 +565,7 @@ impl UAI for CostFunctionNetwork {
         }
 
         debug!("Writing function tables");
-        for factor in self.factors_iter() {
+        for factor in self.factors.iter() {
             factor.write_uai(&mut file, mapping)?;
         }
 
