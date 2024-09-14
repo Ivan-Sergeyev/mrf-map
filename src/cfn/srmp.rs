@@ -16,10 +16,7 @@ use crate::{
     message::{message_trait::Message, messages::Messages},
 };
 
-use super::{
-    solution::Solution,
-    solver::{Solver, SolverOptions},
-};
+use super::solver::{Solver, SolverOptions};
 
 type PassIterator<'a> = Box<dyn Iterator<Item = &'a NodeIndex<usize>> + 'a>;
 
@@ -259,7 +256,7 @@ impl<'a> SRMP<'a> {
 
     fn init_solution(&mut self, compute_solution: bool) -> Option<Solution> {
         match compute_solution {
-            true => Some(Solution::new(self.relaxation.cfn().num_variables())),
+            true => Some(Solution::new(self.relaxation.cfn())),
             false => None,
         }
     }

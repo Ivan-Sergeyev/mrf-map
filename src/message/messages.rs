@@ -7,7 +7,7 @@ use petgraph::{
     Direction::{Incoming, Outgoing},
 };
 
-use crate::cfn::{relaxation::Relaxation, solution::Solution};
+use crate::{cfn::relaxation::Relaxation, Solution};
 
 use super::{
     message_general::{GeneralAlignment, GeneralMessage},
@@ -230,7 +230,10 @@ impl Messages {
 #[cfg(test)]
 mod tests {
     use crate::{
-        cfn::relaxation::ConstructRelaxation, factor_types::factor_type::FactorType,
+        cfn::relaxation::ConstructRelaxation,
+        factor_types::{
+            factor_trait::Factor, factor_type::FactorType, function_table::FunctionTable,
+        },
         CostFunctionNetwork,
     };
 
@@ -238,15 +241,36 @@ mod tests {
 
     fn construct_cfn_example_1() -> CostFunctionNetwork {
         let mut cfn = CostFunctionNetwork::from_domain_sizes(&vec![3, 4, 5], false, 3);
-        cfn.add_unary_factor(0, FactorType::Unary(vec![1., 2., 3.].into()));
-        cfn.add_unary_factor(2, FactorType::Unary(vec![11., 12., 13., 14., 15.].into()));
-        cfn.add_non_unary_factor(vec![0, 1], FactorType::General(vec![4.; 3 * 4].into()));
-        cfn.add_non_unary_factor(vec![0, 2], FactorType::General(vec![5.; 3 * 5].into()));
-        cfn.add_non_unary_factor(vec![1, 2], FactorType::General(vec![6.; 4 * 5].into()));
-        cfn.add_non_unary_factor(
+        cfn.add_factor(FactorType::FunctionTable(FunctionTable::new(
+            &cfn,
+            vec![0],
+            vec![1., 2., 3.],
+        )));
+        cfn.add_factor(FactorType::FunctionTable(FunctionTable::new(
+            &cfn,
+            vec![2],
+            vec![11., 12., 13., 14., 15.],
+        )));
+        cfn.add_factor(FactorType::FunctionTable(FunctionTable::new(
+            &cfn,
+            vec![0, 1],
+            vec![4.; 3 * 4],
+        )));
+        cfn.add_factor(FactorType::FunctionTable(FunctionTable::new(
+            &cfn,
+            vec![0, 2],
+            vec![5.; 3 * 5],
+        )));
+        cfn.add_factor(FactorType::FunctionTable(FunctionTable::new(
+            &cfn,
+            vec![1, 2],
+            vec![6.; 4 * 5],
+        )));
+        cfn.add_factor(FactorType::FunctionTable(FunctionTable::new(
+            &cfn,
             vec![0, 1, 2],
-            FactorType::General(vec![7.; 3 * 4 * 5].into()),
-        );
+            vec![7.; 3 * 4 * 5],
+        )));
         cfn
     }
 
@@ -263,7 +287,7 @@ mod tests {
                 .collect();
 
             let factor_origin = relaxation.factor_origin(edge.target());
-            let max_function_table_size = relaxation.cfn().full_function_table_size(factor_origin);
+            let max_function_table_size = relaxation.cfn().function_table_len(factor_origin);
 
             assert_eq!(message_vec, vec![0.; max_function_table_size]);
         }
@@ -280,12 +304,10 @@ mod tests {
             let reparam_vec: Vec<f64> = reparam.iter().map(|val| *val).collect();
 
             let factor_origin = relaxation.factor_origin(factor);
-            let max_function_table_size = relaxation.cfn().full_function_table_size(factor_origin);
+            let max_function_table_size = relaxation.cfn().function_table_len(factor_origin);
             let factor_type = relaxation.cfn().get_factor(factor_origin);
             let factor_vec: Vec<f64> = match factor_type {
-                Some(factor_type) => (0..max_function_table_size)
-                    .map(|index| factor_type[index])
-                    .collect(),
+                Some(factor_type) => factor_type.clone_function_table(),
                 None => vec![0.; max_function_table_size],
             };
 
@@ -314,7 +336,7 @@ mod tests {
                 .collect();
 
             let expected_value = relaxation.edges_directed(factor, Incoming).count() as f64;
-            let expected_size = cfn.full_function_table_size(relaxation.factor_origin(factor));
+            let expected_size = cfn.function_table_len(relaxation.factor_origin(factor));
             assert_eq!(diff, vec![expected_value; expected_size]);
         }
     }

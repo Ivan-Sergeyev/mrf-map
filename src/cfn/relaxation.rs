@@ -7,6 +7,7 @@ use petgraph::graph::{
 use petgraph::Directed;
 use petgraph::Direction::{self};
 
+use crate::factor_types::factor_trait::Factor;
 use crate::message::message_general::GeneralAlignment;
 use crate::{CostFunctionNetwork, FactorOrigin};
 
@@ -94,12 +95,25 @@ impl<'a> ConstructRelaxation<'a, MinimalEdges> for Relaxation<'a> {
     fn new(cfn: &'a CostFunctionNetwork) -> Self {
         debug!("Constructing new MinimalEdges relaxation");
 
-        // Create an empty directed graph with reserved capacity for nodes and edg
-        let edge_capacity = (0..cfn.num_non_unary_factors()).map(|non_unary_factor_index| cfn.factor_variables(&FactorOrigin::NonUnaryFactor(non_unary_factor_index)).len()).sum();
-        let mut graph = DiGraph::with_capacity(cfn.factors_len(), edge_capacity);
+        // Create an empty directed graph with reserved capacity for nodes and edge
+        let num_non_unary_factors = cfn
+            .factors_iter()
+            .filter(|factor| factor.arity() > 1)
+            .count();
+        let edge_capacity = cfn
+            .factors_iter()
+            .filter_map(|factor| {
+                if factor.arity() > 1 {
+                    Some(factor.arity())
+                } else {
+                    None
+                }
+            })
+            .sum();
 
+        let mut graph = DiGraph::with_capacity(cfn.factors_len(), edge_capacity);
         let mut unary_nodes = Vec::with_capacity(cfn.factors_len());
-        let mut non_unary_nodes = Vec::with_capacity(cfn.num_non_unary_factors());
+        let mut non_unary_nodes = Vec::with_capacity(num_non_unary_factors);
 
         // Add nodes corresponding to original variables
         for variable in 0..cfn.num_variables() {
@@ -109,27 +123,30 @@ impl<'a> ConstructRelaxation<'a, MinimalEdges> for Relaxation<'a> {
             });
         }
 
-        for non_unary_factor_index in 0..cfn.num_non_unary_factors() {
+        for (factor_index, factor) in cfn.factors_iter().enumerate() {
+            if factor.arity() <= 1 {
+                continue;
+            }
+
             // Add a node corresponding to this non-unary factor
-            non_unary_nodes.push(graph.add_node(RNodeData::NonUnaryFactor(non_unary_factor_index)));
-            let new_node = non_unary_nodes[non_unary_factor_index];
-            debug!("Added non-unary factor {} as node {}", { non_unary_factor_index }, {
+            non_unary_nodes.push(graph.add_node(RNodeData::NonUnaryFactor(factor_index)));
+            let new_node = non_unary_nodes.last().unwrap();
+            debug!("Added non-unary factor {} as node {}", { factor_index }, {
                 new_node.index()
             });
-            let non_unary_factor_origin = FactorOrigin::NonUnaryFactor(non_unary_factor_index);
 
             // Add edges from this factor's node to the nodes of all its endpoints
-            for variable in cfn.factor_variables(&non_unary_factor_origin) {
+            for variable in factor.variables() {
                 let variable_node = unary_nodes[*variable];
                 debug!(
                     "Adding edge from node {} to node {}",
                     new_node.index(),
                     variable_node.index()
                 );
-                let alpha = RNodeData::NonUnaryFactor(non_unary_factor_index);
+                let alpha = RNodeData::NonUnaryFactor(factor_index);
                 let beta = RNodeData::Variable(*variable);
                 let weight = REdgeData::new(&cfn, &alpha, &beta);
-                graph.add_edge(new_node, variable_node, weight);
+                graph.add_edge(*new_node, variable_node, weight);
             }
         }
 

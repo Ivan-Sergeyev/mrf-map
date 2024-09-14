@@ -8,8 +8,8 @@ use std::{
 use log::debug;
 
 use crate::{
-    cfn::solution::Solution, factor_types::factor_type::FactorType, CostFunctionNetwork,
-    FactorOrigin,
+    factor_types::{factor_trait::Factor, factor_type::FactorType},
+    CostFunctionNetwork, FactorOrigin, Solution,
 };
 
 use super::message_trait::Message;
@@ -56,6 +56,10 @@ impl GeneralAlignment {
 
         let strides = GeneralAlignment::compute_strides(&cfn, &alpha_variables, &beta_variables);
 
+        println!(
+            "alpha vars {:?} beta vars {:?} beta ft len {}",
+            alpha_variables, beta_variables, beta_function_table_len
+        );
         let mut beta_labeling = vec![0; beta_variables.len()];
         let mut index_adjustment_table = vec![0; beta_function_table_len];
         index_adjustment_table[0] = 0;
@@ -89,8 +93,9 @@ impl GeneralAlignment {
         let alpha_variables = cfn.factor_variables(alpha);
         let beta_variables = cfn.factor_variables(beta);
         let diff_variables = cfn.get_variables_difference(alpha, beta);
-        let alpha_ft_len = cfn.full_function_table_size(alpha);
-        let beta_ft_len = cfn.full_function_table_size(beta);
+        println!("diff variables {:?}", diff_variables);
+        let alpha_ft_len = cfn.function_table_len(alpha);
+        let beta_ft_len = cfn.function_table_len(beta);
         let diff_ft_len = alpha_ft_len / beta_ft_len;
 
         let first_align =
@@ -376,31 +381,28 @@ impl IndexMut<usize> for GeneralMessage {
 }
 
 impl GeneralMessage {
-    pub fn zero_from_size(_factor: Option<&FactorType>, size: usize) -> Self {
+    pub fn zero_from_len(_factor: Option<&FactorType>, len: usize) -> Self {
         // todo: match on factortype, return corresponding messagetype, individual implementations of zero_from_size
         GeneralMessage {
-            value: vec![0.; size],
+            value: vec![0.; len],
         }
     }
 
-    pub fn clone_factor(factor: Option<&FactorType>, size: usize) -> Self {
+    pub fn clone_factor(factor: Option<&FactorType>, len: usize) -> Self {
         // todo: match on factortype, return corresponding messagetype, individual implementations of clone_factor
         match factor {
-            Some(factor) => match factor {
-                FactorType::Unary(factor) => GeneralMessage {
-                    value: factor.function_table.clone(),
-                },
-                FactorType::General(factor) => GeneralMessage {
-                    value: factor.function_table.clone(),
-                },
+            Some(factor) => GeneralMessage {
+                value: factor.clone_function_table(),
             },
-            None => GeneralMessage::zero_from_size(factor, size),
+            None => GeneralMessage::zero_from_len(factor, len),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::factor_types::function_table::FunctionTable;
+
     use super::*;
 
     #[test]
@@ -409,12 +411,20 @@ mod tests {
         let alpha_variables = vec![0, 1, 2];
         let beta_variables = vec![1];
 
-        let mut cfn = CostFunctionNetwork::from_domain_sizes(&domain_sizes, false, 0);
-        cfn.add_non_unary_factor(alpha_variables, FactorType::General(vec![0.; 1].into()));
-        cfn.add_unary_factor(beta_variables[0], FactorType::Unary(vec![0.; 1].into()));
-
         let alpha_origin = FactorOrigin::NonUnaryFactor(0);
         let beta_origin = FactorOrigin::Variable(beta_variables[0]);
+
+        let mut cfn = CostFunctionNetwork::from_domain_sizes(&domain_sizes, false, 0);
+        cfn.add_factor(FactorType::FunctionTable(FunctionTable::new(
+            &cfn,
+            alpha_variables,
+            vec![0.; 3 * 4 * 5],
+        )));
+        cfn.add_factor(FactorType::FunctionTable(FunctionTable::new(
+            &cfn,
+            beta_variables,
+            vec![0.; 4],
+        )));
 
         let alignment = GeneralAlignment::new(&cfn, &alpha_origin, &beta_origin);
         let expected = GeneralAlignment {

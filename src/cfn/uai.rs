@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::{fs::File, io};
+use std::{fmt::Debug, fs::File, io, str::FromStr};
 
 /// Interface for reading from and writing to file in UAI format.
 /// The format specification can be found
@@ -23,4 +23,43 @@ pub enum UAIState {
     NumberOfTableValues(usize),       // stores function index
     TableValues(usize, usize, usize), // stores function index, how many entries were read, and function table size
     EndOfFile,
+}
+
+pub fn string_to_vec<T>(string: &str) -> Vec<T>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
+{
+    string
+        .split_whitespace()
+        .map(|s| s.parse::<T>().unwrap())
+        .collect()
+}
+
+pub fn repeat_float_to_string(repeat: usize, value: f64) -> String {
+    (0..repeat)
+        .map(|_| value.to_string())
+        .collect::<Vec<String>>()
+        .join(" ")
+}
+
+pub fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
+    vec.iter()
+        .map(|elem| elem.to_string())
+        .collect::<Vec<String>>()
+        .join(" ")
+}
+
+pub fn vec_mapping_to_string<T: ToString>(vec: &Vec<T>, mapping: fn(&T) -> T) -> String {
+    vec.iter()
+        .map(|elem| mapping(elem).to_string())
+        .collect::<Vec<String>>()
+        .join(" ")
+}
+
+pub fn option_to_string<T: ToString>(option: Option<T>) -> String {
+    match option {
+        Some(value) => value.to_string(),
+        None => "None".to_string(),
+    }
 }

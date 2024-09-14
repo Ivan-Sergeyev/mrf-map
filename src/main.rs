@@ -9,8 +9,9 @@ mod data_structures {
 mod factor_types {
     pub mod factor_trait;
     pub mod factor_type;
-    pub mod general_factor;
-    pub mod unary_factor;
+    pub mod function_table;
+    pub mod potts;
+    pub mod uniform_constant;
 }
 
 mod message {

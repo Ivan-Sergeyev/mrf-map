@@ -1,55 +1,47 @@
 #![allow(dead_code)]
 
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     fs::File,
     io::{self, BufRead, BufReader, Write},
     mem::swap,
-    str::FromStr,
+    ops::{Index, IndexMut},
+    slice::Iter,
 };
 
 use log::{debug, warn};
 
 use crate::{
-    factor_types::{factor_trait::Factor, factor_type::FactorType},
+    cfn::uai::{string_to_vec, vec_to_string},
+    factor_types::{factor_trait::Factor, factor_type::FactorType, function_table::FunctionTable},
     message::message_general::GeneralMessage,
 };
 
 use crate::cfn::uai::UAIState;
 
-use super::{solution::Solution, uai::UAI};
+use super::uai::{option_to_string, UAI};
 
 type VariableIndex = usize;
-type NonUnaryFactorIndex = usize;
+type FactorIndex = usize;
 
 pub enum FactorOrigin {
     Variable(VariableIndex),
-    NonUnaryFactor(NonUnaryFactorIndex),
+    NonUnaryFactor(FactorIndex),
 }
 
 // Stores information about a variable in the cost function network
 #[derive(Debug)]
 pub struct Variable {
-    variable: Vec<usize>, // single-element vec containing the index of this variable
-    domain_size: usize,   // the domain size of this variable
+    singleton: Vec<usize>, // a one-element vector containing the variable's index
+    domain_size: usize,    // the size of the domain of this variable
     factor_index: Option<usize>, // the index of the corresponding unary factor in `factors` (if it exits)
-    in_non_unary_factors: Vec<NonUnaryFactorIndex>, // indices of non-unary factors that include this variable
-}
-
-// Stores information about a non-unary factor
-#[derive(Debug)]
-pub struct NonUnaryFactor {
-    full_function_table_size: usize, // the product of domain sizes of associated variables
-    factor_index: Option<usize>, // the index of the corresponding non-unary factor in `factors` (if it exists)
-    variables: Vec<VariableIndex>, // indices of variables included in this factor
+    in_non_unary_factors: Vec<FactorIndex>, // indices of non-unary factors that include this variable
 }
 
 // Stores the cost function network
 pub struct CostFunctionNetwork {
     variables: Vec<Variable>, // stores structural information about variables in the network
-    non_unary_factors: Vec<NonUnaryFactor>, // stores structural information about non-unary factors in the network
-    factors: Vec<FactorType>,               // contains numerical representations of all factors
-    origins: Vec<FactorOrigin>, // indicates where structural information for each factor is stored
+    factors: Vec<FactorType>, // contains numerical representations of all factors (unary and non-unary)
 }
 
 impl CostFunctionNetwork {
@@ -57,9 +49,7 @@ impl CostFunctionNetwork {
     pub fn new() -> Self {
         CostFunctionNetwork {
             variables: Vec::new(),
-            non_unary_factors: Vec::new(),
             factors: Vec::new(),
-            origins: Vec::new(),
         }
     }
 
@@ -68,9 +58,7 @@ impl CostFunctionNetwork {
         let reserve_capacity = capacity_unary + capacity_non_unary;
         CostFunctionNetwork {
             variables: Vec::with_capacity(capacity_unary),
-            non_unary_factors: Vec::with_capacity(capacity_non_unary),
             factors: Vec::with_capacity(reserve_capacity),
-            origins: Vec::with_capacity(reserve_capacity),
         }
     }
 
@@ -82,67 +70,27 @@ impl CostFunctionNetwork {
         reserve_unary: bool,
         capacity_non_unary: usize,
     ) -> Self {
-        let variables: Vec<Variable> = domain_sizes // todo: remove type annotations?
+        let variables = domain_sizes
             .iter()
             .enumerate()
-            .map(|(index, domain_size)| Variable {
-                variable: vec![index],
+            .map(|(variable_index, domain_size)| Variable {
+                singleton: vec![variable_index],
                 domain_size: *domain_size,
                 factor_index: None,
                 in_non_unary_factors: Vec::new(),
             })
-            .collect();
+            .collect::<Vec<_>>();
         let reserve_capacity = (reserve_unary as usize) * variables.len() + capacity_non_unary;
 
         CostFunctionNetwork {
-            variables: variables,
-            non_unary_factors: Vec::with_capacity(capacity_non_unary),
+            variables,
             factors: Vec::with_capacity(reserve_capacity),
-            origins: Vec::with_capacity(reserve_capacity),
-        }
-    }
-
-    // Creates a cost function network with provided unary function tables,
-    // and additionally reserves capacity for a given number of non-unary factors
-    pub fn from_unary_function_tables(
-        unary_function_tables: Vec<Vec<f64>>,
-        capacity_non_unary: usize,
-    ) -> Self {
-        let variables = unary_function_tables
-            .iter()
-            .enumerate()
-            .map(|(index, unary_function_table)| Variable {
-                variable: vec![index],
-                domain_size: unary_function_table.len(),
-                factor_index: Some(index),
-                in_non_unary_factors: Vec::new(),
-            })
-            .collect();
-
-        let mut factor_origins: Vec<FactorOrigin> = (0..unary_function_tables.len())
-            .map(|index| FactorOrigin::Variable(index))
-            .collect();
-        factor_origins.reserve(capacity_non_unary);
-
-        let mut factors: Vec<FactorType> = unary_function_tables
-            .into_iter()
-            .map(|unary_function_table| FactorType::Unary(unary_function_table.into()))
-            .collect();
-        factors.reserve(capacity_non_unary);
-
-        CostFunctionNetwork {
-            variables: variables,
-            non_unary_factors: Vec::with_capacity(capacity_non_unary),
-            factors,
-            origins: factor_origins,
         }
     }
 
     // Reserves capacity for at least `additional` more non-unary factors
     pub fn reserve(&mut self, additional: usize) -> &mut Self {
-        self.non_unary_factors.reserve(additional);
         self.factors.reserve(additional);
-        self.origins.reserve(additional);
         self
     }
 
@@ -162,95 +110,50 @@ impl CostFunctionNetwork {
             .fold(1, |product, variable| product * self.domain_size(*variable))
     }
 
-    // Adds a unary factor (assuming it does not already exist)
-    pub fn add_unary_factor(&mut self, variable: usize, factor: FactorType) -> &mut Self {
-        // Assumptions:
-        // - `variable` does not have a unary factor associated with it
-        // - `factor` has arity 1
-        assert!(
-            self.variables[variable].factor_index.is_none(),
-            "Variable already has an associated unary factor."
-        );
-        self.variables[variable].factor_index = Some(self.factors.len());
-        self.factors.push(factor);
-        self.origins.push(FactorOrigin::Variable(variable));
-        self
-    }
-
-    // Sets a unary factor of a given variable (overwrites it if it already exists, or adds a new one if it does not)
-    pub fn set_unary_factor(&mut self, variable: usize, factor: FactorType) -> &mut Self {
-        if let Some(unary_factor_index) = self.variables[variable].factor_index {
-            self.factors[unary_factor_index] = factor;
-            self
-        } else {
-            self.add_unary_factor(variable, factor)
-        }
-    }
-
-    // Adds a non-unary factor (assuming it does not already exist)
-    pub fn add_non_unary_factor(&mut self, variables: Vec<usize>, factor: FactorType) -> &mut Self {
-        // Assumptions:
-        // - `variables` is sorted in increasing order
-        // - `variables` has at least 2 elements
-        // - `factor` has arity equal to len of `variables`
-        assert!(
-            variables.len() >= 2,
-            "A non-unary factor must have at least 2 variables."
+    // Sets a factor of arbitrary type
+    pub fn add_factor(&mut self, factor: FactorType) -> &mut Self {
+        assert_eq!(
+            factor.arity(),
+            factor.variables().len(),
+            "Factor's arity doesn't match the number of variables in it."
         );
         assert!(
-            variables.windows(2).all(|w| w[0] < w[1]),
+            factor.variables().windows(2).all(|w| w[0] < w[1]),
             "Variables in a non-unary factor must be distinct and sorted in increasing order."
         );
 
-        let new_non_unary_factor_index = self.factors.len();
-        for variable in &variables {
-            self.variables[*variable]
-                .in_non_unary_factors
-                .push(new_non_unary_factor_index);
+        match factor.arity() {
+            1 => {
+                let variable = factor.variables()[0];
+                if let Some(unary_factor_index) = self.variables[variable].factor_index {
+                    self.factors[unary_factor_index] = factor;
+                } else {
+                    self.variables[variable].factor_index = Some(self.factors.len());
+                    self.factors.push(factor);
+                }
+            }
+            _ => {
+                if false {
+                    // todo feature: if this factor already exists, overwrite it instead
+                    unimplemented!("Overwriting non-unary factors is not currently implemented");
+                } else {
+                    for variable in factor.variables() {
+                        self.variables[*variable]
+                            .in_non_unary_factors
+                            .push(self.factors.len());
+                    }
+                    self.factors.push(factor);
+                }
+            }
         }
-        self.non_unary_factors.push(NonUnaryFactor {
-            full_function_table_size: self.product_domain_sizes(&variables),
-            factor_index: Some(self.factors.len()),
-            variables,
-        });
-        self.factors.push(factor);
-        self.origins
-            .push(FactorOrigin::NonUnaryFactor(new_non_unary_factor_index));
         self
-    }
-
-    // Sets a non-unary factor (overwrites it if it already exsits, or adds a new one if it does not)
-    pub fn set_non_unary_factor(&mut self, variables: Vec<usize>, factor: FactorType) -> &mut Self {
-        // Assumptions:
-        // - `variables` is sorted in increasing order
-        // - `variables` has at least 2 elements
-        // - `factor` has arity equal to len of `variables`
-        if true {
-            self.add_non_unary_factor(variables, factor)
-        } else {
-            // todo feature: if this factor already exists, overwrite it instead
-            unimplemented!("Overwriting non-unary factors is not currently implemented");
-        }
-    }
-
-    // Sets a factor of arbitrary type
-    pub fn set_factor(&mut self, variables: Vec<usize>, factor: FactorType) -> &mut Self {
-        // Assumption:
-        // - `variables` is sorted in increasing order
-        // - `factor` has arity equal to len of `variables`
-        match variables.len() {
-            1 => self.set_unary_factor(variables[0], factor),
-            _ => self.set_non_unary_factor(variables, factor),
-        }
     }
 
     // Returns a factor indicated by its origin (unary or non-unary)
     pub fn get_factor(&self, factor_origin: &FactorOrigin) -> Option<&FactorType> {
         match factor_origin {
             FactorOrigin::Variable(variable_index) => self.variables[*variable_index].factor_index,
-            FactorOrigin::NonUnaryFactor(non_unary_factor_index) => {
-                self.non_unary_factors[*non_unary_factor_index].factor_index
-            }
+            FactorOrigin::NonUnaryFactor(factor_index) => Some(*factor_index),
         }
         .and_then(|factor_index| Some(&self.factors[factor_index]))
     }
@@ -259,29 +162,22 @@ impl CostFunctionNetwork {
     pub fn arity(&self, factor_origin: &FactorOrigin) -> usize {
         match factor_origin {
             FactorOrigin::Variable(_) => 1,
-            FactorOrigin::NonUnaryFactor(non_unary_factor_index) => self.non_unary_factors
-                [*non_unary_factor_index]
-                .variables
-                .len(),
+            FactorOrigin::NonUnaryFactor(factor_index) => self.factors[*factor_index].arity(),
         }
     }
 
-    // Returns variables associated with a given factor (unary or non-unary)
     pub fn factor_variables(&self, factor_origin: &FactorOrigin) -> &Vec<usize> {
         match factor_origin {
-            FactorOrigin::Variable(variable_index) => &self.variables[*variable_index].variable,
-            FactorOrigin::NonUnaryFactor(non_unary_factor_index) => {
-                &self.non_unary_factors[*non_unary_factor_index].variables
-            }
+            FactorOrigin::Variable(variable_index) => &self.variables[*variable_index].singleton,
+            FactorOrigin::NonUnaryFactor(factor_index) => self.factors[*factor_index].variables(),
         }
     }
 
-    // Returns product of domain sizes of variables associated with a given factor (unary or non-unary)
-    pub fn full_function_table_size(&self, factor_origin: &FactorOrigin) -> usize {
+    pub fn function_table_len(&self, factor_origin: &FactorOrigin) -> usize {
         match factor_origin {
             FactorOrigin::Variable(variable_index) => self.variables[*variable_index].domain_size,
-            FactorOrigin::NonUnaryFactor(non_unary_factor_index) => {
-                self.non_unary_factors[*non_unary_factor_index].full_function_table_size
+            FactorOrigin::NonUnaryFactor(factor_index) => {
+                self.factors[*factor_index].function_table_len()
             }
         }
     }
@@ -310,9 +206,9 @@ impl CostFunctionNetwork {
 
     // Creates new zero message corresponding to a given factor (unary or non-unary)
     pub fn new_zero_message(&self, factor_origin: &FactorOrigin) -> GeneralMessage {
-        GeneralMessage::zero_from_size(
+        GeneralMessage::zero_from_len(
             self.get_factor(factor_origin),
-            self.full_function_table_size(factor_origin),
+            self.function_table_len(factor_origin),
         )
     }
 
@@ -320,7 +216,7 @@ impl CostFunctionNetwork {
     pub fn new_message_clone(&self, factor_origin: &FactorOrigin) -> GeneralMessage {
         GeneralMessage::clone_factor(
             self.get_factor(factor_origin),
-            self.full_function_table_size(factor_origin),
+            self.function_table_len(factor_origin),
         )
     }
 
@@ -342,9 +238,8 @@ impl CostFunctionNetwork {
         self.variables[variable].domain_size
     }
 
-    // Returns the number of non-unary factors in the cost function network
-    pub fn num_non_unary_factors(&self) -> usize {
-        self.non_unary_factors.len()
+    pub fn factors_iter(&self) -> Iter<FactorType> {
+        self.factors.iter()
     }
 
     // Returns the number of factors in the cost function network
@@ -354,43 +249,11 @@ impl CostFunctionNetwork {
 
     // Returns the cost of a solution
     pub fn cost(&self, solution: &Solution) -> f64 {
-        // Start with zero cost
-        let mut cost = 0.;
-
-        // Add costs of all unary factors (that exist)
-        for variable in &self.variables {
-            if let Some(index) = variable.factor_index {
-                cost += self.factors[index].cost(&self, solution, &variable.variable);
-            }
-        }
-
-        // Add costs of all non-unary factors (that exist)
-        for non_unary_factor in &self.non_unary_factors {
-            if let Some(index) = non_unary_factor.factor_index {
-                cost += self.factors[index].cost(&self, solution, &non_unary_factor.variables);
-            }
-        }
-
-        cost
+        self.factors
+            .iter()
+            .map(|factor| factor.cost(&self, solution))
+            .sum()
     }
-}
-
-fn string_to_vec<T>(string: &str) -> Vec<T>
-where
-    T: FromStr,
-    <T as FromStr>::Err: Debug,
-{
-    string
-        .split_whitespace()
-        .map(|s| s.parse::<T>().unwrap())
-        .collect()
-}
-
-fn vec_to_string<T: ToString>(v: &Vec<T>) -> String {
-    v.iter()
-        .map(|elem| elem.to_string())
-        .collect::<Vec<String>>()
-        .join(" ")
 }
 
 impl UAI for CostFunctionNetwork {
@@ -497,14 +360,13 @@ impl UAI for CostFunctionNetwork {
                     let mut function_table = Vec::new();
                     swap(&mut function_entries, &mut function_table);
 
-                    // Prepare factor
-                    let factor = match function_scopes[function_idx].len() {
-                        1 => FactorType::Unary(function_table.into()),
-                        _ => FactorType::General(function_table.into()),
-                    };
-
                     // Add factor to cost function network
-                    cfn.set_factor(function_scopes[function_idx].to_vec(), factor);
+                    let factor = FactorType::FunctionTable(FunctionTable::new(
+                        &cfn,
+                        function_scopes[function_idx].to_vec(),
+                        function_table,
+                    ));
+                    cfn.add_factor(factor);
 
                     state = if function_idx + 1 < function_scopes.len() {
                         UAIState::NumberOfTableValues(function_idx + 1)
@@ -530,7 +392,7 @@ impl UAI for CostFunctionNetwork {
     fn write_uai(&self, mut file: File, lg: bool) -> io::Result<()> {
         debug!("In write_uai() for file {:?} with lg option {}", file, lg);
 
-        let mapping = [|value| value, |value: f64| value.ln()][lg as usize];
+        let mapping = [|value: &f64| *value, |value: &f64| value.ln()][lg as usize];
 
         debug!("Writing preamble: graph type, variables, and domain sizes");
         let graph_type = "MARKOV";
@@ -550,18 +412,13 @@ impl UAI for CostFunctionNetwork {
         write!(file, "{}\n", self.factors_len())?;
 
         debug!("Writing function scopes");
-        for factor in &self.origins {
-            // Number of variables, list of variables
-            match factor {
-                FactorOrigin::Variable(variable_index) => {
-                    write!(file, "1 {}\n", variable_index)?;
-                }
-                FactorOrigin::NonUnaryFactor(non_unary_factor_index) => {
-                    let variables = &self.non_unary_factors[*non_unary_factor_index].variables;
-                    let num_variables = variables.len();
-                    write!(file, "{} {}\n", num_variables, vec_to_string(variables))?;
-                }
-            }
+        for factor in &self.factors {
+            write!(
+                file,
+                "{} {}\n",
+                factor.arity(),
+                vec_to_string(factor.variables())
+            )?;
         }
 
         debug!("Writing function tables");
@@ -571,5 +428,65 @@ impl UAI for CostFunctionNetwork {
 
         debug!("UAI export complete");
         Ok(())
+    }
+}
+
+pub struct Solution {
+    labels: Vec<Option<usize>>, // indexed by variables, None = variable is unlabeled, usize = label of variable
+}
+
+impl Solution {
+    // Creates a new solution with each variable unassigned
+    pub fn new(cfn: &CostFunctionNetwork) -> Self {
+        Solution {
+            labels: vec![None; cfn.num_variables()],
+        }
+    }
+
+    // Checks if every variable in vec is labeled
+    pub fn is_fully_labeled(&self, variables: &Vec<usize>) -> bool {
+        variables
+            .iter()
+            .all(|variable| self.labels[*variable].is_some())
+    }
+
+    // Returns number of labeled variables in vec
+    pub fn num_labeled(&self, variables: &Vec<usize>) -> usize {
+        variables.iter().fold(0, |num_labeled, variable| {
+            num_labeled + self.labels[*variable].is_some() as usize
+        })
+    }
+
+    fn labels_to_vec_string(&self) -> Vec<String> {
+        self.labels
+            .iter()
+            .map(|label| option_to_string(*label))
+            .collect::<Vec<_>>()
+    }
+}
+
+impl Index<usize> for Solution {
+    type Output = Option<usize>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.labels[index]
+    }
+}
+
+impl IndexMut<usize> for Solution {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.labels[index]
+    }
+}
+
+impl std::fmt::Debug for Solution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.labels_to_vec_string())
+    }
+}
+
+impl Display for Solution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.labels_to_vec_string())
     }
 }

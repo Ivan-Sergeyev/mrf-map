@@ -5,7 +5,7 @@ use std::{
     slice::{Iter, IterMut},
 };
 
-use crate::{cfn::solution::Solution, CostFunctionNetwork, FactorOrigin};
+use crate::{CostFunctionNetwork, FactorOrigin, Solution};
 
 // Interface for working with messages.
 // Note: reparametrizations are stored as messages, since they can be viewed as "initial" messages,
