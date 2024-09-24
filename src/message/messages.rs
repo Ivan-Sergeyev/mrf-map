@@ -10,13 +10,13 @@ use petgraph::{
 use crate::{cfn::relaxation::Relaxation, Solution};
 
 use super::{
-    message_general::{GeneralAlignment, GeneralMessage},
+    message_nd::{AlignmentIndexing, MessageND},
     message_trait::Message,
 };
 
 // Stores messages and facilitates computations on groups of messages, including reparametrizations
 pub struct Messages {
-    messages: Vec<GeneralMessage>, // todo: use MessageType
+    messages: Vec<MessageND>, // todo: use MessageType
 }
 
 impl Messages {
@@ -34,7 +34,7 @@ impl Messages {
     }
 
     // Creates a new reparametrization and initializes it with data from a given factor
-    fn init_reparam(&self, relaxation: &Relaxation, factor: NodeIndex<usize>) -> GeneralMessage {
+    fn init_reparam(&self, relaxation: &Relaxation, factor: NodeIndex<usize>) -> MessageND {
         relaxation
             .cfn()
             .new_message_clone(relaxation.factor_origin(factor))
@@ -44,7 +44,7 @@ impl Messages {
     fn add_all_incoming_messages(
         &self,
         relaxation: &Relaxation,
-        reparam: &mut GeneralMessage,
+        reparam: &mut MessageND,
         factor: NodeIndex<usize>,
     ) {
         for in_edge in relaxation.edges_directed(factor, Incoming) {
@@ -56,7 +56,7 @@ impl Messages {
     fn sub_all_outgoing_messages(
         &self,
         relaxation: &Relaxation,
-        reparam: &mut GeneralMessage,
+        reparam: &mut MessageND,
         factor: NodeIndex<usize>,
     ) {
         for out_edge in relaxation.edges_directed(factor, Outgoing) {
@@ -68,9 +68,9 @@ impl Messages {
     fn sub_all_other_outgoing_messages(
         &self,
         relaxation: &Relaxation,
-        reparam: &mut GeneralMessage,
+        reparam: &mut MessageND,
         factor: NodeIndex<usize>,
-        edge: EdgeReference<'_, GeneralAlignment, usize>,
+        edge: EdgeReference<'_, AlignmentIndexing, usize>,
     ) {
         for out_edge in relaxation
             .edges_directed(factor, Outgoing)
@@ -87,9 +87,9 @@ impl Messages {
     fn subtract_all_other_outgoing_messages_alt(
         &self,
         relaxation: &Relaxation,
-        reparam: &mut GeneralMessage,
+        reparam: &mut MessageND,
         factor: NodeIndex<usize>,
-        edge: EdgeReference<'_, GeneralAlignment, usize>,
+        edge: EdgeReference<'_, AlignmentIndexing, usize>,
     ) {
         self.sub_all_outgoing_messages(relaxation, reparam, factor);
         reparam.add_assign_outgoing(&self.messages[edge.id().index()], edge.weight());
@@ -99,9 +99,10 @@ impl Messages {
     // over a given reparametrization, then renormalizes the message so that its smallest entry becomes 0
     fn update_and_normalize(
         &mut self,
-        reparam: &GeneralMessage,
-        edge: EdgeReference<'_, GeneralAlignment, usize>,
+        reparam: &MessageND,
+        edge: EdgeReference<'_, AlignmentIndexing, usize>,
     ) -> f64 {
+        // debug!();
         let delta =
             self.messages[edge.id().index()].update_with_minimization(&reparam, edge.weight());
         self.messages[edge.id().index()].add_assign_scalar(-delta);
@@ -113,7 +114,7 @@ impl Messages {
     pub fn send(
         &mut self,
         relaxation: &Relaxation,
-        edge: EdgeReference<'_, GeneralAlignment, usize>,
+        edge: EdgeReference<'_, AlignmentIndexing, usize>,
     ) -> f64 {
         debug!(
             "In send() for edge {} from {} to {}",
@@ -135,7 +136,7 @@ impl Messages {
         &mut self,
         relaxation: &Relaxation,
         factor: NodeIndex<usize>,
-    ) -> GeneralMessage {
+    ) -> MessageND {
         debug!("In compute_reparam() for factor {}", factor.index());
 
         let mut reparam = self.init_reparam(relaxation, factor);
@@ -147,8 +148,8 @@ impl Messages {
     // Subtracts a given reparametrization from the message corresponding to a given edge
     pub fn sub_assign_reparam(
         &mut self,
-        reparam: &GeneralMessage,
-        edge: EdgeReference<'_, GeneralAlignment, usize>,
+        reparam: &MessageND,
+        edge: EdgeReference<'_, AlignmentIndexing, usize>,
     ) {
         debug!(
             "In sub_assign_reparam() for edge {} from {} to {}",
@@ -176,9 +177,9 @@ impl Messages {
     pub fn send_restricted(
         &self,
         relaxation: &Relaxation,
-        edge: EdgeReference<'_, GeneralAlignment, usize>,
+        edge: EdgeReference<'_, AlignmentIndexing, usize>,
         solution: &Solution,
-    ) -> GeneralMessage {
+    ) -> MessageND {
         debug!(
             "In send_restricted() for edge {} from {} to {}",
             edge.id().index(),
@@ -190,36 +191,55 @@ impl Messages {
         let mut reparam_alpha = self.init_reparam(relaxation, alpha);
         self.add_all_incoming_messages(relaxation, &mut reparam_alpha, alpha);
         self.sub_all_other_outgoing_messages(relaxation, &mut reparam_alpha, alpha, edge);
-        reparam_alpha.restricted_min(
+        debug!(
+            "reparam_alpha before taking restricted min: {:?} alpha {} beta {}",
+            reparam_alpha,
+            alpha.index(),
+            edge.target().index()
+        );
+        let restricted_min = reparam_alpha.restricted_min(
             relaxation.cfn(),
             solution,
             relaxation.factor_origin(alpha),
             relaxation.factor_origin(edge.target()),
-        )
+        );
+        debug!(
+            "reparam_alpha after taking restricted min: {:?}",
+            restricted_min
+        );
+        restricted_min
     }
 
-    // Computes "restricted" reparametrization of a given factor by sending "restricted" by a given solution.
+    // Computes "restricted" reparametrization of a given factor by sending messages "restricted" by a given solution.
     // Refer to the "Extracting primal solution" subsection in the SRMP section for more details.
     pub fn compute_restricted_reparam(
         &self,
         relaxation: &Relaxation,
         factor: NodeIndex<usize>,
         solution: &Solution,
-    ) -> GeneralMessage {
+    ) -> MessageND {
         debug!(
             "In compute_restricted_reparam() for factor {}",
             factor.index()
         );
 
         let mut reparam_beta = self.init_reparam(relaxation, factor);
+        debug!("reparam_beta {:?}", reparam_beta);
         self.sub_all_outgoing_messages(relaxation, &mut reparam_beta, factor);
         for in_edge in relaxation.edges_directed(factor, Incoming) {
             let alpha = relaxation.factor_origin(in_edge.source());
             let num_labeled = solution.num_labeled(relaxation.cfn().factor_variables(alpha));
+            debug!(
+                "for in_edge source {} num_labeled is {}",
+                in_edge.source().index(),
+                num_labeled
+            );
             if num_labeled > 0 && num_labeled < relaxation.cfn().arity(alpha) {
+                debug!("In partially labeled branch");
                 let restrected_message = self.send_restricted(relaxation, in_edge, solution);
                 reparam_beta.add_assign_incoming(&restrected_message);
             } else {
+                debug!("In fully (un)labeled branch");
                 reparam_beta.add_assign_incoming(&self.messages[in_edge.id().index()]);
             }
         }

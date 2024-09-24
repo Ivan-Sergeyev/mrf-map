@@ -27,7 +27,6 @@ pub trait Message: Index<usize> + IndexMut<usize> {
     fn iter(&self) -> Iter<f64>;
     fn iter_mut(&mut self) -> IterMut<f64>;
 
-    fn max(&self) -> &f64;
     fn min(&self) -> &f64;
     fn index_min(&self) -> usize;
 

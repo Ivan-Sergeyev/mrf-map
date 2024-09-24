@@ -14,12 +14,12 @@ use crate::{
 
 use super::message_trait::Message;
 
-pub struct GeneralAlignment {
-    first_align: Vec<usize>,
-    second_align: Vec<usize>,
+pub struct AlignmentIndexing {
+    first_index: Vec<usize>,
+    second_index: Vec<usize>,
 }
 
-impl GeneralAlignment {
+impl AlignmentIndexing {
     fn compute_strides(
         cfn: &CostFunctionNetwork,
         alpha_variables: &Vec<usize>,
@@ -54,12 +54,7 @@ impl GeneralAlignment {
             alpha_variables, beta_variables
         );
 
-        let strides = GeneralAlignment::compute_strides(&cfn, &alpha_variables, &beta_variables);
-
-        println!(
-            "alpha vars {:?} beta vars {:?} beta ft len {}",
-            alpha_variables, beta_variables, beta_function_table_len
-        );
+        let strides = AlignmentIndexing::compute_strides(&cfn, &alpha_variables, &beta_variables);
         let mut beta_labeling = vec![0; beta_variables.len()];
         let mut index_adjustment_table = vec![0; beta_function_table_len];
         index_adjustment_table[0] = 0;
@@ -93,30 +88,30 @@ impl GeneralAlignment {
         let alpha_variables = cfn.factor_variables(alpha);
         let beta_variables = cfn.factor_variables(beta);
         let diff_variables = cfn.get_variables_difference(alpha, beta);
-        println!("diff variables {:?}", diff_variables);
         let alpha_ft_len = cfn.function_table_len(alpha);
         let beta_ft_len = cfn.function_table_len(beta);
         let diff_ft_len = alpha_ft_len / beta_ft_len;
 
-        let first_align =
+        let first_index =
             Self::compute_index_adjustment(cfn, alpha_variables, beta_variables, beta_ft_len);
 
-        let second_align =
+        let second_index =
             Self::compute_index_adjustment(cfn, alpha_variables, &diff_variables, diff_ft_len);
 
-        GeneralAlignment {
-            first_align,
-            second_align,
+        AlignmentIndexing {
+            first_index,
+            second_index,
         }
     }
 }
 
-pub struct GeneralMessage {
+#[derive(Debug, PartialEq)]
+pub struct MessageND {
     value: Vec<f64>,
 }
 
-impl Message for GeneralMessage {
-    type OutgoingAlignment = GeneralAlignment;
+impl Message for MessageND {
+    type OutgoingAlignment = AlignmentIndexing;
 
     fn new_outgoing_alignment(
         cfn: &CostFunctionNetwork,
@@ -132,10 +127,6 @@ impl Message for GeneralMessage {
 
     fn iter_mut(&mut self) -> IterMut<f64> {
         self.value.iter_mut()
-    }
-
-    fn max(&self) -> &f64 {
-        self.value.iter().max_by(|a, b| a.total_cmp(b)).unwrap()
     }
 
     fn min(&self) -> &f64 {
@@ -179,25 +170,27 @@ impl Message for GeneralMessage {
     fn add_assign_outgoing(&mut self, rhs: &Self, outgoing_alignment: &Self::OutgoingAlignment) {
         debug!(
             "In add_assign_outgoing() for self {:?} rhs {:?} align1: {:?} align2: {:?}",
-            self.value, rhs.value, outgoing_alignment.first_align, outgoing_alignment.second_align
+            self.value, rhs.value, outgoing_alignment.first_index, outgoing_alignment.second_index
         );
-        for (b, b_index) in outgoing_alignment.first_align.iter().enumerate() {
-            for c_index in outgoing_alignment.second_align.iter() {
+        for (b, b_index) in outgoing_alignment.first_index.iter().enumerate() {
+            for c_index in outgoing_alignment.second_index.iter() {
                 self.value[*b_index + *c_index] += rhs[b];
             }
         }
+        debug!("result: {:?}", self);
     }
 
     fn sub_assign_outgoing(&mut self, rhs: &Self, outgoing_alignment: &Self::OutgoingAlignment) {
         debug!(
             "In sub_assign_outgoing() for self {:?} rhs {:?} align1: {:?} align2: {:?}",
-            self.value, rhs.value, outgoing_alignment.first_align, outgoing_alignment.second_align
+            self.value, rhs.value, outgoing_alignment.first_index, outgoing_alignment.second_index
         );
-        for (b, b_index) in outgoing_alignment.first_align.iter().enumerate() {
-            for c_index in outgoing_alignment.second_align.iter() {
+        for (b, b_index) in outgoing_alignment.first_index.iter().enumerate() {
+            for c_index in outgoing_alignment.second_index.iter() {
                 self.value[*b_index + *c_index] -= rhs[b];
             }
         }
+        debug!("result: {:?}", self);
     }
 
     fn mul_assign_scalar(&mut self, rhs: f64) {
@@ -218,9 +211,9 @@ impl Message for GeneralMessage {
         outgoing_alignment: &Self::OutgoingAlignment,
     ) -> f64 {
         let mut rhs_min = f64::INFINITY;
-        for (b, b_index) in outgoing_alignment.first_align.iter().enumerate() {
+        for (b, b_index) in outgoing_alignment.first_index.iter().enumerate() {
             let tmp_min = outgoing_alignment
-                .second_align
+                .second_index
                 .iter()
                 .map(|c_index| rhs.value[*b_index + *c_index])
                 .min_by(|a, b| a.total_cmp(b))
@@ -234,65 +227,77 @@ impl Message for GeneralMessage {
     fn restricted_min(
         &self,
         cfn: &CostFunctionNetwork,
-        partial_labeling: &Solution,
+        solution: &Solution,
         alpha: &FactorOrigin,
         beta: &FactorOrigin,
     ) -> Self {
-        let alpha_arity = cfn.arity(alpha);
         let alpha_vars = cfn.factor_variables(alpha);
         let beta_vars = cfn.factor_variables(beta);
 
-        let mut kb_factor_array = Vec::with_capacity(alpha_arity);
-        let mut k_factor_array = Vec::with_capacity(alpha_arity);
-        let mut k_array = Vec::with_capacity(alpha_arity);
+        let alpha_arity = alpha_vars.len();
+        let beta_arity = beta_vars.len();
+
+        let mut self_strides = Vec::with_capacity(alpha_arity);
+        let mut beta_strides = Vec::with_capacity(alpha_arity);
+        let mut self_domain_sizes = Vec::with_capacity(alpha_arity);
         let mut labeling = Vec::with_capacity(alpha_arity);
 
-        let mut k_factor = 1;
-        let mut k = 0;
-        let mut kb = 0;
-        let mut beta_var_idx = beta_vars.len() - 1;
+        let mut self_stride = 1;
+        let mut self_entry_index = 0;
+        let mut beta_entry_index = 0;
 
-        // todo: precompute full kb_factor_array (doesn't depend on partial labeling) and save it similar to existing MessageData
-        for alpha_var_idx in (0..alpha_arity).rev() {
-            let mut kb_factor = 1;
-            while alpha_vars[alpha_var_idx] != beta_vars[beta_var_idx] {
-                kb_factor *= cfn.domain_size(beta_vars[beta_var_idx]);
-                if beta_var_idx == 0 {
-                    kb_factor *= 0;
+        // todo: precompute strides, save similar to existing alaignment data, then select needed entries
+        for alpha_var_index in (0..alpha_arity).rev() {
+            let mut beta_stride = 1;
+            let mut beta_var_index = beta_arity - 1;
+            while alpha_vars[alpha_var_index] != beta_vars[beta_var_index] {
+                beta_stride *= cfn.domain_size(beta_vars[beta_var_index]);
+                if beta_var_index == 0 {
+                    beta_stride = 0;
                     break;
                 }
-                beta_var_idx -= 1;
+                beta_var_index -= 1;
             }
 
-            if let Some(label) = partial_labeling[alpha_var_idx] {
-                kb += label * kb_factor;
-                k += label * k_factor;
+            if let Some(label) = solution[alpha_vars[alpha_var_index]] {
+                self_entry_index += label * self_stride;
+                beta_entry_index += label * beta_stride;
             } else {
-                kb_factor_array.push(kb_factor);
-                k_factor_array.push(k_factor);
-                k_array.push(cfn.domain_size(alpha_vars[alpha_var_idx]));
+                self_strides.push(self_stride);
+                beta_strides.push(beta_stride);
+                self_domain_sizes.push(cfn.domain_size(alpha_vars[alpha_var_index]));
                 labeling.push(0);
             }
-            k_factor *= cfn.domain_size(alpha_vars[alpha_var_idx]);
+
+            self_stride *= cfn.domain_size(alpha_vars[alpha_var_index]);
         }
 
-        let mut theta_beta: GeneralMessage = cfn.new_zero_message(beta).into();
-        theta_beta[kb] = self.value[k];
+        let mut theta_beta: MessageND = cfn.new_inf_message(beta).into();
+        theta_beta[beta_entry_index] = self.value[self_entry_index];
+
+        let labeling_len = labeling.len();
+
+        if labeling_len == 0 {
+            return theta_beta;
+        }
+
         let mut i = 0;
-        while i < labeling.len() {
-            if labeling[i] < k_array[i] - 1 {
-                // "Advance" to next label
+        loop {
+            if labeling[i] < self_domain_sizes[i] - 1 {
                 labeling[i] += 1;
-                k += k_factor_array[i];
-                kb += kb_factor_array[i];
-                theta_beta[kb] = theta_beta[kb].min(self.value[k]);
+                self_entry_index += self_strides[i];
+                beta_entry_index += beta_strides[i];
+                theta_beta[beta_entry_index] =
+                    theta_beta[beta_entry_index].min(self.value[self_entry_index]);
                 i = 0;
             } else {
-                // "Carry over" to initial label
-                k -= labeling[i] * k_factor_array[i];
-                kb -= labeling[i] * kb_factor_array[i];
+                self_entry_index -= labeling[i] * self_strides[i];
+                beta_entry_index -= labeling[i] * beta_strides[i];
                 labeling[i] = 0;
                 i += 1;
+                if i == labeling_len {
+                    break;
+                }
             }
         }
         theta_beta
@@ -304,61 +309,60 @@ impl Message for GeneralMessage {
         beta: &FactorOrigin,
         solution: &mut Solution,
     ) {
-        let arity = cfn.arity(beta);
+        let beta_variables = cfn.factor_variables(beta);
+        let arity = beta_variables.len();
 
-        let mut k = 0;
-        let mut k_factor_array = Vec::with_capacity(arity);
-        let mut k_array = Vec::with_capacity(arity);
-        let mut index_array = Vec::with_capacity(arity);
+        let mut strides = Vec::with_capacity(arity);
+        let mut unlabeled_domain_sizes = Vec::with_capacity(arity);
+        let mut unlabeled_variables = Vec::with_capacity(arity);
         let mut labeling = Vec::with_capacity(arity);
 
-        let mut k_factor = 1;
+        let mut entry_index = 0;
+        let mut stride = 1;
 
-        for i in (0..arity).rev() {
-            if let Some(label) = solution[i] {
-                k += label * k_factor
+        for variable in beta_variables.iter().rev() {
+            if let Some(label) = solution[*variable] {
+                entry_index += label * stride
             } else {
-                solution[i] = Some(0);
-                k_array.push(cfn.domain_size(i));
-                k_factor_array.push(k_factor);
-                index_array.push(i);
+                solution[*variable] = Some(0);
+                unlabeled_domain_sizes.push(cfn.domain_size(*variable));
+                strides.push(stride);
+                unlabeled_variables.push(*variable);
                 labeling.push(0);
             }
-            k_factor *= cfn.domain_size(i);
+            stride *= cfn.domain_size(*variable);
         }
 
-        let n = labeling.len();
+        let num_unlabeled = labeling.len();
 
-        if n == arity {
+        if num_unlabeled == arity {
             // Everything is unlabeled
-            let mut k_best = self.index_min();
-            for i in (0..arity).rev() {
-                solution[i] = Some(k_best % cfn.domain_size(i));
-                if i == 0 {
-                    return;
-                }
-                k_best /= cfn.domain_size(i);
+            let mut index_min = self.index_min();
+            for variable in beta_variables.iter().rev() {
+                solution[*variable] = Some(index_min % cfn.domain_size(*variable));
+                index_min /= cfn.domain_size(*variable);
             }
+            return;
         }
 
-        let mut v_best = self.value[k];
+        let mut min_value = self.value[entry_index];
         let mut i = 0;
         loop {
-            if labeling[i] < k_array[i] - 1 {
+            if labeling[i] < unlabeled_domain_sizes[i] - 1 {
                 labeling[i] += 1;
-                k += k_factor_array[i];
-                if v_best > self.value[k] {
-                    v_best = self.value[k];
-                    for j in 0..n {
-                        solution[index_array[j]] = Some(labeling[j]);
+                entry_index += strides[i];
+                if self.value[entry_index] < min_value {
+                    min_value = self.value[entry_index];
+                    for j in 0..num_unlabeled {
+                        solution[unlabeled_variables[j]] = Some(labeling[j]);
                     }
                 }
                 i = 0;
             } else {
-                k -= labeling[i] * k_factor_array[i];
+                entry_index -= labeling[i] * strides[i];
                 labeling[i] = 0;
                 i += 1;
-                if i == n {
+                if i == num_unlabeled {
                     break;
                 }
             }
@@ -366,7 +370,7 @@ impl Message for GeneralMessage {
     }
 }
 
-impl Index<usize> for GeneralMessage {
+impl Index<usize> for MessageND {
     type Output = f64;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -374,34 +378,43 @@ impl Index<usize> for GeneralMessage {
     }
 }
 
-impl IndexMut<usize> for GeneralMessage {
+impl IndexMut<usize> for MessageND {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.value[index]
     }
 }
 
-impl GeneralMessage {
+impl MessageND {
     pub fn zero_from_len(_factor: Option<&FactorType>, len: usize) -> Self {
-        // todo: match on factortype, return corresponding messagetype, individual implementations of zero_from_size
-        GeneralMessage {
+        // todo: match on factortype, return corresponding messagetype, individual implementations
+        MessageND {
             value: vec![0.; len],
         }
     }
 
+    pub fn inf_from_len(_factor: Option<&FactorType>, len: usize) -> Self {
+        // todo: match on factortype, return corresponding messagetype, individual implementations
+        MessageND {
+            value: vec![f64::INFINITY; len],
+        }
+    }
+
     pub fn clone_factor(factor: Option<&FactorType>, len: usize) -> Self {
-        // todo: match on factortype, return corresponding messagetype, individual implementations of clone_factor
+        // todo: match on factortype, return corresponding messagetype, individual implementations
         match factor {
-            Some(factor) => GeneralMessage {
+            Some(factor) => MessageND {
                 value: factor.clone_function_table(),
             },
-            None => GeneralMessage::zero_from_len(factor, len),
+            None => MessageND::zero_from_len(factor, len),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::factor_types::function_table::FunctionTable;
+    use std::fs::OpenOptions;
+
+    use crate::{cfn::uai::UAI, factor_types::function_table::FunctionTable};
 
     use super::*;
 
@@ -426,13 +439,37 @@ mod tests {
             vec![0.; 4],
         )));
 
-        let alignment = GeneralAlignment::new(&cfn, &alpha_origin, &beta_origin);
-        let expected = GeneralAlignment {
-            first_align: vec![0, 5, 10, 15],
-            second_align: vec![0, 1, 2, 3, 4, 20, 21, 22, 23, 24, 40, 41, 42, 43, 44],
+        let alignment = AlignmentIndexing::new(&cfn, &alpha_origin, &beta_origin);
+        let expected = AlignmentIndexing {
+            first_index: vec![0, 5, 10, 15],
+            second_index: vec![0, 1, 2, 3, 4, 20, 21, 22, 23, 24, 40, 41, 42, 43, 44],
         };
 
-        assert_eq!(alignment.first_align, expected.first_align);
-        assert_eq!(alignment.second_align, expected.second_align);
+        assert_eq!(alignment.first_index, expected.first_index);
+        assert_eq!(alignment.second_index, expected.second_index);
+    }
+
+    #[test]
+    fn restricted_min() {
+        // todo: create instance by hand for independence
+        let file = OpenOptions::new()
+            .read(true)
+            .open("test_instances/frustrated_cycle_5_sym.uai")
+            .unwrap();
+        let cfn = CostFunctionNetwork::read_uai(file, false);
+
+        let alpha = FactorOrigin::NonUnaryFactor(1);
+        let beta = FactorOrigin::Variable(2);
+        let solution = vec![Some(0), Some(1), None, None, None].into();
+        let message = MessageND {
+            value: vec![3., 4., 0., 1.],
+        };
+
+        let restricted_min = message.restricted_min(&cfn, &solution, &alpha, &beta);
+        let expected = MessageND {
+            value: vec![0., 1.],
+        };
+
+        assert_eq!(restricted_min, expected);
     }
 }

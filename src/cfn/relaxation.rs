@@ -8,11 +8,11 @@ use petgraph::Directed;
 use petgraph::Direction::{self};
 
 use crate::factor_types::factor_trait::Factor;
-use crate::message::message_general::GeneralAlignment;
+use crate::message::message_nd::AlignmentIndexing;
 use crate::{CostFunctionNetwork, FactorOrigin};
 
 type RNodeData = FactorOrigin;
-type REdgeData = GeneralAlignment;
+type REdgeData = AlignmentIndexing;
 pub type RelaxationGraph = DiGraph<RNodeData, REdgeData, usize>;
 
 pub struct Relaxation<'a> {
@@ -25,7 +25,7 @@ impl<'a> Relaxation<'a> {
         self.cfn
     }
 
-    pub fn edge_references(&self) -> EdgeReferences<GeneralAlignment, usize> {
+    pub fn edge_references(&self) -> EdgeReferences<AlignmentIndexing, usize> {
         self.graph.edge_references()
     }
 
@@ -95,7 +95,7 @@ impl<'a> ConstructRelaxation<'a, MinimalEdges> for Relaxation<'a> {
     fn new(cfn: &'a CostFunctionNetwork) -> Self {
         debug!("Constructing new MinimalEdges relaxation");
 
-        // Create an empty directed graph with reserved capacity for nodes and edge
+        // Create an empty directed graph with reserved capacity for nodes and edges
         let num_non_unary_factors = cfn
             .factors_iter()
             .filter(|factor| factor.arity() > 1)

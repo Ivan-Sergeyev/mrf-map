@@ -7,6 +7,7 @@ use std::{
     mem::swap,
     ops::{Index, IndexMut},
     slice::Iter,
+    time::Instant,
 };
 
 use log::{debug, warn};
@@ -14,7 +15,7 @@ use log::{debug, warn};
 use crate::{
     cfn::uai::{string_to_vec, vec_to_string},
     factor_types::{factor_trait::Factor, factor_type::FactorType, function_table::FunctionTable},
-    message::message_general::GeneralMessage,
+    message::message_nd::MessageND,
 };
 
 use crate::cfn::uai::UAIState;
@@ -32,8 +33,8 @@ pub enum FactorOrigin {
 // Stores information about a variable in the cost function network
 #[derive(Debug)]
 pub struct Variable {
-    singleton: Vec<usize>, // a one-element vector containing the variable's index
-    domain_size: usize,    // the size of the domain of this variable
+    index: Vec<usize>,           // a one-element vector containing the variable's index
+    domain_size: usize,          // the size of the domain of this variable
     factor_index: Option<usize>, // the index of the corresponding unary factor in `factors` (if it exits)
     in_non_unary_factors: Vec<FactorIndex>, // indices of non-unary factors that include this variable
 }
@@ -41,7 +42,7 @@ pub struct Variable {
 // Stores the cost function network
 pub struct CostFunctionNetwork {
     variables: Vec<Variable>, // stores structural information about variables in the network
-    factors: Vec<FactorType>, // contains numerical representations of all factors (unary and non-unary)
+    factors: Vec<FactorType>, // stores representations of all factors (unary and non-unary)
 }
 
 impl CostFunctionNetwork {
@@ -74,7 +75,7 @@ impl CostFunctionNetwork {
             .iter()
             .enumerate()
             .map(|(variable_index, domain_size)| Variable {
-                singleton: vec![variable_index],
+                index: vec![variable_index],
                 domain_size: *domain_size,
                 factor_index: None,
                 in_non_unary_factors: Vec::new(),
@@ -168,7 +169,7 @@ impl CostFunctionNetwork {
 
     pub fn factor_variables(&self, factor_origin: &FactorOrigin) -> &Vec<usize> {
         match factor_origin {
-            FactorOrigin::Variable(variable_index) => &self.variables[*variable_index].singleton,
+            FactorOrigin::Variable(variable_index) => &self.variables[*variable_index].index,
             FactorOrigin::NonUnaryFactor(factor_index) => self.factors[*factor_index].variables(),
         }
     }
@@ -204,17 +205,28 @@ impl CostFunctionNetwork {
         difference
     }
 
+    // todo: move creation of messages to relaxation?
     // Creates new zero message corresponding to a given factor (unary or non-unary)
-    pub fn new_zero_message(&self, factor_origin: &FactorOrigin) -> GeneralMessage {
-        GeneralMessage::zero_from_len(
+    pub fn new_zero_message(&self, factor_origin: &FactorOrigin) -> MessageND {
+        MessageND::zero_from_len(
             self.get_factor(factor_origin),
             self.function_table_len(factor_origin),
         )
     }
 
+    // todo: move creation of messages to relaxation?
+    // Creates new infinite message corresponding to a given factor (unary or non-unary)
+    pub fn new_inf_message(&self, factor_origin: &FactorOrigin) -> MessageND {
+        MessageND::inf_from_len(
+            self.get_factor(factor_origin),
+            self.function_table_len(factor_origin),
+        )
+    }
+
+    // todo: move creation of messages to relaxation?
     // Creates new message initialized with contents of a given factor (unary or non-unary)
-    pub fn new_message_clone(&self, factor_origin: &FactorOrigin) -> GeneralMessage {
-        GeneralMessage::clone_factor(
+    pub fn new_message_clone(&self, factor_origin: &FactorOrigin) -> MessageND {
+        MessageND::clone_factor(
             self.get_factor(factor_origin),
             self.function_table_len(factor_origin),
         )
@@ -260,6 +272,7 @@ impl UAI for CostFunctionNetwork {
     fn read_uai(file: File, lg: bool) -> Self {
         debug!("In read_uai() for file {:?} with lg option {}", file, lg);
 
+        let time_start = Instant::now();
         let mut state = UAIState::ModelType;
 
         let lines = BufReader::new(file).lines();
@@ -385,13 +398,15 @@ impl UAI for CostFunctionNetwork {
             cfn.map_factors_inplace(|value: &mut f64| *value = value.exp());
         }
 
-        debug!("UAI import complete");
+        let elapsed_time = time_start.elapsed();
+        debug!("UAI import complete. Elapsed time {:?}.", elapsed_time);
         cfn
     }
 
     fn write_uai(&self, mut file: File, lg: bool) -> io::Result<()> {
         debug!("In write_uai() for file {:?} with lg option {}", file, lg);
 
+        let time_start = Instant::now();
         let mapping = [|value: &f64| *value, |value: &f64| value.ln()][lg as usize];
 
         debug!("Writing preamble: graph type, variables, and domain sizes");
@@ -426,7 +441,8 @@ impl UAI for CostFunctionNetwork {
             factor.write_uai(&mut file, mapping)?;
         }
 
-        debug!("UAI export complete");
+        let elapsed_time = time_start.elapsed();
+        debug!("UAI export complete. Elapsed time {:?}.", elapsed_time);
         Ok(())
     }
 }
@@ -488,5 +504,11 @@ impl std::fmt::Debug for Solution {
 impl Display for Solution {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.labels_to_vec_string())
+    }
+}
+
+impl From<Vec<Option<usize>>> for Solution {
+    fn from(value: Vec<Option<usize>>) -> Self {
+        Solution { labels: value }
     }
 }

@@ -15,7 +15,8 @@ mod factor_types {
 }
 
 mod message {
-    pub mod message_general;
+    // pub mod message_1d;
+    pub mod message_nd;
     pub mod message_trait;
     pub mod messages;
     // pub mod message_type;
@@ -25,7 +26,6 @@ mod message {
 mod cfn {
     pub mod cost_function_network;
     pub mod relaxation;
-    pub mod solution;
     pub mod solver;
     pub mod srmp;
     pub mod uai;
@@ -44,7 +44,7 @@ use cfn::{
     uai::UAI,
 };
 use log::debug;
-use std::fs::OpenOptions;
+use std::{ffi::OsStr, fs::OpenOptions};
 
 fn main() {
     // Enable debug-level logging
@@ -56,13 +56,16 @@ fn main() {
 
     for path in test_instance_files {
         let input_filename = path.unwrap().path();
+        if input_filename.file_name() != Some(OsStr::new("grid4x4.UAI.LG")) {
+            continue;
+        }
 
         debug!("Importing test instance from {}", input_filename.display());
         let input_file = OpenOptions::new().read(true).open(input_filename).unwrap();
-        let cfn = CostFunctionNetwork::read_uai(input_file, false);
+        let mut cfn = CostFunctionNetwork::read_uai(input_file, false);
 
         debug!("Flipping signs");
-        // cfn.map_factors_inplace(|value| *value *= -1.0); // flip sign (todo: is this needed?)
+        cfn.map_factors_inplace(|value| *value *= -1.0); // flip sign (todo: is this needed?)
 
         debug!("Constructing relaxation");
         let relaxation = Relaxation::new(&cfn);

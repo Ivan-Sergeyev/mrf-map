@@ -17,7 +17,7 @@ impl SolverOptions {
             max_iterations: 10000,
             time_max: Duration::new(20 * 60, 0), // 20 minutes
             eps: 1e-8,
-            compute_solution_period: 10,
+            compute_solution_period: 1,
         }
     }
 
