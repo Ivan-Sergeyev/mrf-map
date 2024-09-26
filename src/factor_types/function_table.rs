@@ -6,20 +6,23 @@ use std::{
     io::{self, Write},
 };
 
+use crate::cfn::solution::Solution;
 use crate::{
     cfn::uai::{vec_mapping_to_string, vec_to_string},
-    CostFunctionNetwork, Solution,
+    CostFunctionNetwork,
 };
 
 use super::factor_trait::Factor;
 
+// Stores the factor as a complete function table
 pub struct FunctionTable {
-    variables: Vec<usize>,
-    strides: Vec<usize>,
-    value: Vec<f64>,
+    variables: Vec<usize>, // the variables associated with this factor
+    strides: Vec<usize>,   // the offsets used for indexing in the function table
+    value: Vec<f64>,       // the function table itself
 }
 
 impl FunctionTable {
+    // Initializes
     pub fn new(cfn: &CostFunctionNetwork, variables: Vec<usize>, value: Vec<f64>) -> Self {
         let mut strides = vec![1; variables.len()];
         for index in 1..variables.len() {

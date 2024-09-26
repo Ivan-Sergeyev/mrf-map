@@ -5,26 +5,33 @@ use std::{
     slice::{Iter, IterMut},
 };
 
-use log::debug;
-
 use crate::{
+    cfn::{relaxation::Relaxation, solution::Solution},
     factor_types::{factor_trait::Factor, factor_type::FactorType},
-    CostFunctionNetwork, FactorOrigin, Solution,
+    CostFunctionNetwork, FactorOrigin,
 };
 
 use super::message_trait::Message;
 
+// Stores the complete reindexing information for performing binary operations on messages of different dimensions
+// See MessageND::add_assign_outgoing() and sub_assign_outgoing() on how the indices are used
+// todo: better desc
 pub struct AlignmentIndexing {
-    first_index: Vec<usize>,
-    second_index: Vec<usize>,
+    index_first: Vec<usize>,
+    index_second: Vec<usize>,
 }
 
 impl AlignmentIndexing {
+    // Computes the offsets used for indexing in the message
     fn compute_strides(
         cfn: &CostFunctionNetwork,
         alpha_variables: &Vec<usize>,
         beta_variables: &Vec<usize>,
     ) -> Vec<usize> {
+        // Compute strides[i] = product of domain sizes of variables in alpha
+        // starting with the smallest variable in alpha that is greater than beta[i]
+        // and ending with the last variable in alpha
+
         let beta_arity = beta_variables.len();
         let mut strides = vec![0; beta_arity + 1];
         strides[beta_arity] = 1; // barrier element
@@ -40,35 +47,36 @@ impl AlignmentIndexing {
                 strides[stride_index] *= cfn.domain_size(*alpha_var_rev_iter.next().unwrap());
             }
         }
+
         strides
     }
 
-    fn compute_index_adjustment(
+    // Computes the indexing table corresponding to the two given sets of variables
+    fn compute_indexing(
         cfn: &CostFunctionNetwork,
         alpha_variables: &Vec<usize>,
         beta_variables: &Vec<usize>,
         beta_function_table_len: usize,
     ) -> Vec<usize> {
-        debug!(
-            "In compute_index_adjustment() for alpha_variables {:?} and beta_variables {:?}",
-            alpha_variables, beta_variables
-        );
+        // Assumption: alpha_variables contains beta_variables, beta_variables is not empty
 
         let strides = AlignmentIndexing::compute_strides(&cfn, &alpha_variables, &beta_variables);
+
         let mut beta_labeling = vec![0; beta_variables.len()];
-        let mut index_adjustment_table = vec![0; beta_function_table_len];
-        index_adjustment_table[0] = 0;
+        let mut indexing_table = vec![0; beta_function_table_len];
+        indexing_table[0] = 0;
         let beta_var_idx_start = beta_variables.len() - 1;
         let mut beta_var_idx = beta_var_idx_start;
         let mut table_idx = 0;
         let mut k = 0;
+
         loop {
             if beta_labeling[beta_var_idx] < cfn.domain_size(beta_variables[beta_var_idx]) - 1 {
                 // "Advance" to next label
                 beta_labeling[beta_var_idx] += 1;
                 k += strides[beta_var_idx];
                 table_idx += 1;
-                index_adjustment_table[table_idx] = k;
+                indexing_table[table_idx] = k;
                 beta_var_idx = beta_var_idx_start;
             } else {
                 // "Carry over" to initial label
@@ -81,30 +89,29 @@ impl AlignmentIndexing {
             }
         }
 
-        index_adjustment_table
+        indexing_table
     }
 
+    // Initializes the alignment structure for the given cost function network,
+    // with `alpha` as the source factor and `beta` as the target factor
     pub fn new(cfn: &CostFunctionNetwork, alpha: &FactorOrigin, beta: &FactorOrigin) -> Self {
-        let alpha_variables = cfn.factor_variables(alpha);
-        let beta_variables = cfn.factor_variables(beta);
-        let diff_variables = cfn.get_variables_difference(alpha, beta);
+        // Assumption: alpha strictly contains all variables in beta
+
+        let alpha_vars = cfn.factor_variables(alpha);
+        let beta_vars = cfn.factor_variables(beta);
+        let diff_vars = cfn.get_variables_difference(alpha, beta);
         let alpha_ft_len = cfn.function_table_len(alpha);
         let beta_ft_len = cfn.function_table_len(beta);
         let diff_ft_len = alpha_ft_len / beta_ft_len;
 
-        let first_index =
-            Self::compute_index_adjustment(cfn, alpha_variables, beta_variables, beta_ft_len);
-
-        let second_index =
-            Self::compute_index_adjustment(cfn, alpha_variables, &diff_variables, diff_ft_len);
-
         AlignmentIndexing {
-            first_index,
-            second_index,
+            index_first: Self::compute_indexing(cfn, alpha_vars, beta_vars, beta_ft_len),
+            index_second: Self::compute_indexing(cfn, alpha_vars, &diff_vars, diff_ft_len),
         }
     }
 }
 
+// Stores a message for a general factor, using complete reindexing information for handling messages of different dimensions
 #[derive(Debug, PartialEq)]
 pub struct MessageND {
     value: Vec<f64>,
@@ -148,49 +155,31 @@ impl Message for MessageND {
     }
 
     fn add_assign_incoming(&mut self, rhs: &Self) {
-        debug!(
-            "In add_assign_incoming() for self {:?} rhs {:?}",
-            self.value, rhs.value
-        );
         for (val, rhs_val) in self.iter_mut().zip(rhs.iter()) {
             *val += rhs_val;
         }
     }
 
     fn sub_assign_incoming(&mut self, rhs: &Self) {
-        debug!(
-            "In sub_assign_incoming() for self {:?} rhs {:?}",
-            self.value, rhs.value
-        );
         for (val, rhs_val) in self.iter_mut().zip(rhs.iter()) {
             *val -= rhs_val;
         }
     }
 
     fn add_assign_outgoing(&mut self, rhs: &Self, outgoing_alignment: &Self::OutgoingAlignment) {
-        debug!(
-            "In add_assign_outgoing() for self {:?} rhs {:?} align1: {:?} align2: {:?}",
-            self.value, rhs.value, outgoing_alignment.first_index, outgoing_alignment.second_index
-        );
-        for (b, b_index) in outgoing_alignment.first_index.iter().enumerate() {
-            for c_index in outgoing_alignment.second_index.iter() {
-                self.value[*b_index + *c_index] += rhs[b];
+        for (first_index, first) in outgoing_alignment.index_first.iter().enumerate() {
+            for second in outgoing_alignment.index_second.iter() {
+                self.value[*first + *second] += rhs[first_index];
             }
         }
-        debug!("result: {:?}", self);
     }
 
     fn sub_assign_outgoing(&mut self, rhs: &Self, outgoing_alignment: &Self::OutgoingAlignment) {
-        debug!(
-            "In sub_assign_outgoing() for self {:?} rhs {:?} align1: {:?} align2: {:?}",
-            self.value, rhs.value, outgoing_alignment.first_index, outgoing_alignment.second_index
-        );
-        for (b, b_index) in outgoing_alignment.first_index.iter().enumerate() {
-            for c_index in outgoing_alignment.second_index.iter() {
-                self.value[*b_index + *c_index] -= rhs[b];
+        for (first_index, first) in outgoing_alignment.index_first.iter().enumerate() {
+            for second in outgoing_alignment.index_second.iter() {
+                self.value[*first + *second] -= rhs[first_index];
             }
         }
-        debug!("result: {:?}", self);
     }
 
     fn mul_assign_scalar(&mut self, rhs: f64) {
@@ -205,20 +194,22 @@ impl Message for MessageND {
         }
     }
 
-    fn update_with_minimization(
+    fn set_to_reparam_min(
         &mut self,
         rhs: &Self,
         outgoing_alignment: &Self::OutgoingAlignment,
     ) -> f64 {
+        // todo: describe implementation details
+
         let mut rhs_min = f64::INFINITY;
-        for (b, b_index) in outgoing_alignment.first_index.iter().enumerate() {
+        for (first_index, first) in outgoing_alignment.index_first.iter().enumerate() {
             let tmp_min = outgoing_alignment
-                .second_index
+                .index_second
                 .iter()
-                .map(|c_index| rhs.value[*b_index + *c_index])
+                .map(|second| rhs.value[*first + *second])
                 .min_by(|a, b| a.total_cmp(b))
                 .unwrap();
-            self.value[b] = tmp_min;
+            self.value[first_index] = tmp_min;
             rhs_min = rhs_min.min(tmp_min);
         }
         rhs_min
@@ -226,13 +217,15 @@ impl Message for MessageND {
 
     fn restricted_min(
         &self,
-        cfn: &CostFunctionNetwork,
+        relaxation: &Relaxation,
         solution: &Solution,
         alpha: &FactorOrigin,
         beta: &FactorOrigin,
     ) -> Self {
-        let alpha_vars = cfn.factor_variables(alpha);
-        let beta_vars = cfn.factor_variables(beta);
+        // todo: describe implementation details
+
+        let alpha_vars = relaxation.cfn().factor_variables(alpha);
+        let beta_vars = relaxation.cfn().factor_variables(beta);
 
         let alpha_arity = alpha_vars.len();
         let beta_arity = beta_vars.len();
@@ -251,7 +244,7 @@ impl Message for MessageND {
             let mut beta_stride = 1;
             let mut beta_var_index = beta_arity - 1;
             while alpha_vars[alpha_var_index] != beta_vars[beta_var_index] {
-                beta_stride *= cfn.domain_size(beta_vars[beta_var_index]);
+                beta_stride *= relaxation.cfn().domain_size(beta_vars[beta_var_index]);
                 if beta_var_index == 0 {
                     beta_stride = 0;
                     break;
@@ -265,14 +258,14 @@ impl Message for MessageND {
             } else {
                 self_strides.push(self_stride);
                 beta_strides.push(beta_stride);
-                self_domain_sizes.push(cfn.domain_size(alpha_vars[alpha_var_index]));
+                self_domain_sizes.push(relaxation.cfn().domain_size(alpha_vars[alpha_var_index]));
                 labeling.push(0);
             }
 
-            self_stride *= cfn.domain_size(alpha_vars[alpha_var_index]);
+            self_stride *= relaxation.cfn().domain_size(alpha_vars[alpha_var_index]);
         }
 
-        let mut theta_beta: MessageND = cfn.new_inf_message(beta).into();
+        let mut theta_beta: MessageND = relaxation.message_inf(beta).into();
         theta_beta[beta_entry_index] = self.value[self_entry_index];
 
         let labeling_len = labeling.len();
@@ -303,12 +296,19 @@ impl Message for MessageND {
         theta_beta
     }
 
-    fn update_solution_restricted_minimum(
+    fn update_solution_restricted_min(
         &self,
         cfn: &CostFunctionNetwork,
         beta: &FactorOrigin,
         solution: &mut Solution,
     ) {
+        if let FactorOrigin::Variable(variable_index) = beta {
+            // Choose a label with the smallest cost
+            solution[*variable_index] = Some(self.index_min());
+            return;
+        }
+
+        // todo: describe implementation details
         let beta_variables = cfn.factor_variables(beta);
         let arity = beta_variables.len();
 
@@ -384,23 +384,21 @@ impl IndexMut<usize> for MessageND {
     }
 }
 
+// todo: match on factortype, return corresponding messagetype, individual implementations
 impl MessageND {
     pub fn zero_from_len(_factor: Option<&FactorType>, len: usize) -> Self {
-        // todo: match on factortype, return corresponding messagetype, individual implementations
         MessageND {
             value: vec![0.; len],
         }
     }
 
     pub fn inf_from_len(_factor: Option<&FactorType>, len: usize) -> Self {
-        // todo: match on factortype, return corresponding messagetype, individual implementations
         MessageND {
             value: vec![f64::INFINITY; len],
         }
     }
 
-    pub fn clone_factor(factor: Option<&FactorType>, len: usize) -> Self {
-        // todo: match on factortype, return corresponding messagetype, individual implementations
+    pub fn clone_from_factor(factor: Option<&FactorType>, len: usize) -> Self {
         match factor {
             Some(factor) => MessageND {
                 value: factor.clone_function_table(),
@@ -412,9 +410,10 @@ impl MessageND {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::OpenOptions;
-
-    use crate::{cfn::uai::UAI, factor_types::function_table::FunctionTable};
+    use crate::{
+        cfn::{relaxation::ConstructRelaxation, uai::UAI},
+        factor_types::function_table::FunctionTable,
+    };
 
     use super::*;
 
@@ -441,22 +440,22 @@ mod tests {
 
         let alignment = AlignmentIndexing::new(&cfn, &alpha_origin, &beta_origin);
         let expected = AlignmentIndexing {
-            first_index: vec![0, 5, 10, 15],
-            second_index: vec![0, 1, 2, 3, 4, 20, 21, 22, 23, 24, 40, 41, 42, 43, 44],
+            index_first: vec![0, 5, 10, 15],
+            index_second: vec![0, 1, 2, 3, 4, 20, 21, 22, 23, 24, 40, 41, 42, 43, 44],
         };
 
-        assert_eq!(alignment.first_index, expected.first_index);
-        assert_eq!(alignment.second_index, expected.second_index);
+        assert_eq!(alignment.index_first, expected.index_first);
+        assert_eq!(alignment.index_second, expected.index_second);
     }
 
     #[test]
     fn restricted_min() {
         // todo: create instance by hand for independence
-        let file = OpenOptions::new()
-            .read(true)
-            .open("test_instances/frustrated_cycle_5_sym.uai")
-            .unwrap();
-        let cfn = CostFunctionNetwork::read_uai(file, false);
+        let cfn = CostFunctionNetwork::read_uai(
+            "test_instances/frustrated_cycle_5_sym.uai".into(),
+            false,
+        );
+        let relaxation = Relaxation::new(&cfn);
 
         let alpha = FactorOrigin::NonUnaryFactor(1);
         let beta = FactorOrigin::Variable(2);
@@ -465,11 +464,13 @@ mod tests {
             value: vec![3., 4., 0., 1.],
         };
 
-        let restricted_min = message.restricted_min(&cfn, &solution, &alpha, &beta);
+        let restricted_min = message.restricted_min(&relaxation, &solution, &alpha, &beta);
         let expected = MessageND {
             value: vec![0., 1.],
         };
 
         assert_eq!(restricted_min, expected);
     }
+
+    // todo: add tests for remaining functions
 }

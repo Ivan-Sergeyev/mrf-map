@@ -7,16 +7,20 @@ use std::{
 };
 
 use crate::{
-    cfn::uai::{vec_mapping_to_string, vec_to_string},
-    CostFunctionNetwork, Solution,
+    cfn::{
+        solution::Solution,
+        uai::{vec_mapping_to_string, vec_to_string},
+    },
+    CostFunctionNetwork,
 };
 
 use super::factor_trait::Factor;
 
+// Stores a Potts factor
 pub struct Potts {
-    variables: Vec<usize>,
-    domain_sizes: (usize, usize),
-    value: f64,
+    variables: Vec<usize>,        // the two variables associated with this factor
+    domain_sizes: (usize, usize), // the domain sizes of this factor's variables
+    value: f64, // the value of the Potts factor whenever the labels of this factor's variables match
 }
 
 impl Potts {

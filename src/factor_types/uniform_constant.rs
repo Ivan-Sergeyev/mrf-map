@@ -6,14 +6,18 @@ use std::{
     io::{self, Write},
 };
 
-use crate::{cfn::uai::repeat_float_to_string, CostFunctionNetwork, Solution};
+use crate::{
+    cfn::{solution::Solution, uai::repeat_float_to_string},
+    CostFunctionNetwork,
+};
 
 use super::factor_trait::Factor;
 
+// Stores a uniform constant factor
 pub struct UniformConstant {
-    variables: Vec<usize>,
-    function_table_len: usize,
-    value: f64,
+    variables: Vec<usize>,     // the variables associated with this factor
+    function_table_len: usize, // the length of the function table that this factor expands to
+    value: f64, // the value of this factor, which is the same for all assignments for all the variables
 }
 
 impl UniformConstant {

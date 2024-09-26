@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
 use std::{
-    fmt::{Debug, Display},
-    fs::File,
+    fmt::Debug,
+    fs::OpenOptions,
     io::{self, BufRead, BufReader, Write},
-    mem::swap,
-    ops::{Index, IndexMut},
+    mem,
+    path::PathBuf,
     slice::Iter,
     time::Instant,
 };
@@ -15,16 +15,16 @@ use log::{debug, warn};
 use crate::{
     cfn::uai::{string_to_vec, vec_to_string},
     factor_types::{factor_trait::Factor, factor_type::FactorType, function_table::FunctionTable},
-    message::message_nd::MessageND,
 };
 
 use crate::cfn::uai::UAIState;
 
-use super::uai::{option_to_string, UAI};
+use super::uai::UAI;
 
 type VariableIndex = usize;
 type FactorIndex = usize;
 
+// Shows if a factor is unary or non-unary factors and stores the corresponding index
 pub enum FactorOrigin {
     Variable(VariableIndex),
     NonUnaryFactor(FactorIndex),
@@ -33,15 +33,14 @@ pub enum FactorOrigin {
 // Stores information about a variable in the cost function network
 #[derive(Debug)]
 pub struct Variable {
-    index: Vec<usize>,           // a one-element vector containing the variable's index
-    domain_size: usize,          // the size of the domain of this variable
+    variable_vec: Vec<usize>, // a one-element vector containing the variable's index
+    domain_size: usize,       // the size of the domain of this variable
     factor_index: Option<usize>, // the index of the corresponding unary factor in `factors` (if it exits)
-    in_non_unary_factors: Vec<FactorIndex>, // indices of non-unary factors that include this variable
 }
 
-// Stores the cost function network
+// Stores a cost function network
 pub struct CostFunctionNetwork {
-    variables: Vec<Variable>, // stores structural information about variables in the network
+    variables: Vec<Variable>, // stores information about variables in the network
     factors: Vec<FactorType>, // stores representations of all factors (unary and non-unary)
 }
 
@@ -75,10 +74,9 @@ impl CostFunctionNetwork {
             .iter()
             .enumerate()
             .map(|(variable_index, domain_size)| Variable {
-                index: vec![variable_index],
+                variable_vec: vec![variable_index],
                 domain_size: *domain_size,
                 factor_index: None,
-                in_non_unary_factors: Vec::new(),
             })
             .collect::<Vec<_>>();
         let reserve_capacity = (reserve_unary as usize) * variables.len() + capacity_non_unary;
@@ -136,13 +134,10 @@ impl CostFunctionNetwork {
             _ => {
                 if false {
                     // todo feature: if this factor already exists, overwrite it instead
+                    // store the following field in Variable struct and use it to implement this feature:
+                    // in_non_unary_factors: Vec<FactorIndex>, // indices of non-unary factors that include this variable
                     unimplemented!("Overwriting non-unary factors is not currently implemented");
                 } else {
-                    for variable in factor.variables() {
-                        self.variables[*variable]
-                            .in_non_unary_factors
-                            .push(self.factors.len());
-                    }
                     self.factors.push(factor);
                 }
             }
@@ -150,7 +145,7 @@ impl CostFunctionNetwork {
         self
     }
 
-    // Returns a factor indicated by its origin (unary or non-unary)
+    // Returns the factor indicated by its origin (unary or non-unary)
     pub fn get_factor(&self, factor_origin: &FactorOrigin) -> Option<&FactorType> {
         match factor_origin {
             FactorOrigin::Variable(variable_index) => self.variables[*variable_index].factor_index,
@@ -167,13 +162,15 @@ impl CostFunctionNetwork {
         }
     }
 
+    // Returns a reference to the Vec of variables associated with a given factor
     pub fn factor_variables(&self, factor_origin: &FactorOrigin) -> &Vec<usize> {
         match factor_origin {
-            FactorOrigin::Variable(variable_index) => &self.variables[*variable_index].index,
+            FactorOrigin::Variable(variable_index) => &self.variables[*variable_index].variable_vec,
             FactorOrigin::NonUnaryFactor(factor_index) => self.factors[*factor_index].variables(),
         }
     }
 
+    // Returns the length
     pub fn function_table_len(&self, factor_origin: &FactorOrigin) -> usize {
         match factor_origin {
             FactorOrigin::Variable(variable_index) => self.variables[*variable_index].domain_size,
@@ -205,33 +202,6 @@ impl CostFunctionNetwork {
         difference
     }
 
-    // todo: move creation of messages to relaxation?
-    // Creates new zero message corresponding to a given factor (unary or non-unary)
-    pub fn new_zero_message(&self, factor_origin: &FactorOrigin) -> MessageND {
-        MessageND::zero_from_len(
-            self.get_factor(factor_origin),
-            self.function_table_len(factor_origin),
-        )
-    }
-
-    // todo: move creation of messages to relaxation?
-    // Creates new infinite message corresponding to a given factor (unary or non-unary)
-    pub fn new_inf_message(&self, factor_origin: &FactorOrigin) -> MessageND {
-        MessageND::inf_from_len(
-            self.get_factor(factor_origin),
-            self.function_table_len(factor_origin),
-        )
-    }
-
-    // todo: move creation of messages to relaxation?
-    // Creates new message initialized with contents of a given factor (unary or non-unary)
-    pub fn new_message_clone(&self, factor_origin: &FactorOrigin) -> MessageND {
-        MessageND::clone_factor(
-            self.get_factor(factor_origin),
-            self.function_table_len(factor_origin),
-        )
-    }
-
     // Applies a mapping to all factors
     pub fn map_factors_inplace(&mut self, mapping: fn(&mut f64)) -> &mut Self {
         self.factors
@@ -250,6 +220,7 @@ impl CostFunctionNetwork {
         self.variables[variable].domain_size
     }
 
+    // Returns an iterator over all factors
     pub fn factors_iter(&self) -> Iter<FactorType> {
         self.factors.iter()
     }
@@ -258,25 +229,24 @@ impl CostFunctionNetwork {
     pub fn factors_len(&self) -> usize {
         self.factors.len()
     }
-
-    // Returns the cost of a solution
-    pub fn cost(&self, solution: &Solution) -> f64 {
-        self.factors
-            .iter()
-            .map(|factor| factor.cost(&self, solution))
-            .sum()
-    }
 }
 
 impl UAI for CostFunctionNetwork {
-    fn read_uai(file: File, lg: bool) -> Self {
-        debug!("In read_uai() for file {:?} with lg option {}", file, lg);
+    fn read_uai(path: PathBuf, lg: bool) -> Self {
+        debug!("In read_uai() for file {:?} with lg option {}", path, lg);
 
-        let time_start = Instant::now();
+        let file = OpenOptions::new().read(true).open(path).unwrap();
+
         let mut state = UAIState::ModelType;
 
         let lines = BufReader::new(file).lines();
         let mut trimmed_line;
+
+        // Flip signs for UAI, exponentiate and flip signs for LG
+        let mapping = [
+            |value: &mut f64| *value *= -1.,
+            |value: &mut f64| *value = -(value.exp()),
+        ][lg as usize];
 
         let mut cfn = CostFunctionNetwork::new();
 
@@ -289,7 +259,6 @@ impl UAI for CostFunctionNetwork {
             let line = line.unwrap();
             trimmed_line = line.trim();
 
-            // Skip empty lines
             if trimmed_line.is_empty() {
                 continue;
             }
@@ -349,31 +318,36 @@ impl UAI for CostFunctionNetwork {
                     state = UAIState::TableValues(function_idx, 0, num_entries);
                 }
                 UAIState::TableValues(function_idx, cur_entries, num_entries) => {
-                    debug!(
-                        "Reading function {}, collected {} out of {} entries",
-                        function_idx, cur_entries, num_entries
+                    assert!(
+                        function_idx < function_scopes.len(),
+                        "Function index out of bounds."
                     );
-                    assert!(function_idx < function_scopes.len());
                     let mut new_entries = string_to_vec(trimmed_line);
                     let new_cur_entries = cur_entries + new_entries.len();
                     function_entries.append(&mut new_entries);
 
-                    assert!(new_cur_entries <= num_entries, "Too many entries");
+                    assert!(new_cur_entries <= num_entries, "Too many entries.");
                     if new_cur_entries < num_entries {
-                        // Continue collecting function table entries
+                        debug!(
+                            "Reading function {}. Collected {} out of {} entries.",
+                            function_idx, cur_entries, num_entries
+                        );
                         state = UAIState::TableValues(function_idx, new_cur_entries, num_entries);
                         continue;
                     }
-
                     debug!(
-                        "Reading function {}, collected all {} entries, saving",
+                        "Reading function {}. Collected all {} entries.",
                         function_idx, num_entries
                     );
-                    // Move values into a separate vectors
-                    let mut function_table = Vec::new();
-                    swap(&mut function_entries, &mut function_table);
 
-                    // Add factor to cost function network
+                    // Move values into a separate vector
+                    let mut function_table = Vec::new();
+                    mem::swap(&mut function_entries, &mut function_table);
+
+                    // Apply mapping (flip signs for UAI, exponentiate and flip signs for LG)
+                    function_table.iter_mut().for_each(|value| mapping(value));
+
+                    // Create factor from function table and add it to the cost function network
                     let factor = FactorType::FunctionTable(FunctionTable::new(
                         &cfn,
                         function_scopes[function_idx].to_vec(),
@@ -381,6 +355,7 @@ impl UAI for CostFunctionNetwork {
                     ));
                     cfn.add_factor(factor);
 
+                    // Proceed to the next function
                     state = if function_idx + 1 < function_scopes.len() {
                         UAIState::NumberOfTableValues(function_idx + 1)
                     } else {
@@ -388,26 +363,27 @@ impl UAI for CostFunctionNetwork {
                     };
                 }
                 UAIState::EndOfFile => {
-                    warn!("Ignoring trailing line at the end of file: {}", line);
+                    warn!("Ignored trailing line at the end of file: {}", line);
                 }
             }
         }
 
-        if lg {
-            debug!("LG flag is {}, exponentiating all function tables", lg);
-            cfn.map_factors_inplace(|value: &mut f64| *value = value.exp());
-        }
+        debug!("UAI import complete.");
 
-        let elapsed_time = time_start.elapsed();
-        debug!("UAI import complete. Elapsed time {:?}.", elapsed_time);
         cfn
     }
 
-    fn write_uai(&self, mut file: File, lg: bool) -> io::Result<()> {
-        debug!("In write_uai() for file {:?} with lg option {}", file, lg);
+    fn write_uai(&self, path: PathBuf, lg: bool) -> io::Result<()> {
+        debug!("In write_uai() for file {:?} with lg option {}", path, lg);
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("problem_instances/output.uai")
+            .unwrap();
 
         let time_start = Instant::now();
-        let mapping = [|value: &f64| *value, |value: &f64| value.ln()][lg as usize];
+        let mapping = [|value: &f64| -*value, |value: &f64| (-value).ln()][lg as usize];
 
         debug!("Writing preamble: graph type, variables, and domain sizes");
         let graph_type = "MARKOV";
@@ -444,71 +420,5 @@ impl UAI for CostFunctionNetwork {
         let elapsed_time = time_start.elapsed();
         debug!("UAI export complete. Elapsed time {:?}.", elapsed_time);
         Ok(())
-    }
-}
-
-pub struct Solution {
-    labels: Vec<Option<usize>>, // indexed by variables, None = variable is unlabeled, usize = label of variable
-}
-
-impl Solution {
-    // Creates a new solution with each variable unassigned
-    pub fn new(cfn: &CostFunctionNetwork) -> Self {
-        Solution {
-            labels: vec![None; cfn.num_variables()],
-        }
-    }
-
-    // Checks if every variable in vec is labeled
-    pub fn is_fully_labeled(&self, variables: &Vec<usize>) -> bool {
-        variables
-            .iter()
-            .all(|variable| self.labels[*variable].is_some())
-    }
-
-    // Returns number of labeled variables in vec
-    pub fn num_labeled(&self, variables: &Vec<usize>) -> usize {
-        variables.iter().fold(0, |num_labeled, variable| {
-            num_labeled + self.labels[*variable].is_some() as usize
-        })
-    }
-
-    fn labels_to_vec_string(&self) -> Vec<String> {
-        self.labels
-            .iter()
-            .map(|label| option_to_string(*label))
-            .collect::<Vec<_>>()
-    }
-}
-
-impl Index<usize> for Solution {
-    type Output = Option<usize>;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.labels[index]
-    }
-}
-
-impl IndexMut<usize> for Solution {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.labels[index]
-    }
-}
-
-impl std::fmt::Debug for Solution {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.labels_to_vec_string())
-    }
-}
-
-impl Display for Solution {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.labels_to_vec_string())
-    }
-}
-
-impl From<Vec<Option<usize>>> for Solution {
-    fn from(value: Vec<Option<usize>>) -> Self {
-        Solution { labels: value }
     }
 }

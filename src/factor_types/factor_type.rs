@@ -2,19 +2,19 @@
 
 use std::{fmt::Display, fs::File, io};
 
-use crate::{CostFunctionNetwork, Solution};
+use crate::{cfn::solution::Solution, CostFunctionNetwork};
 
-use super::{
-    factor_trait::Factor, function_table::FunctionTable, potts::Potts,
-    uniform_constant::UniformConstant,
-};
+use super::{factor_trait::Factor, function_table::FunctionTable, potts::Potts, uniform_constant::UniformConstant};
 
+// Enumerates all supported factor types
 pub enum FactorType {
     FunctionTable(FunctionTable),
     UniformConstant(UniformConstant),
     Potts(Potts),
 }
 
+// todo: generate match arms automatically
+// todo: combine macros into one
 macro_rules! match_factor_action {
     ($factor_type:ident, $factor_match:ident, $action:expr) => {
         match $factor_type {

@@ -7,7 +7,7 @@ use petgraph::{
     Direction::{Incoming, Outgoing},
 };
 
-use crate::{cfn::relaxation::Relaxation, Solution};
+use crate::cfn::{relaxation::Relaxation, solution::Solution};
 
 use super::{
     message_nd::{AlignmentIndexing, MessageND},
@@ -24,20 +24,14 @@ impl Messages {
     pub fn new(relaxation: &Relaxation) -> Self {
         let mut messages = Vec::with_capacity(relaxation.edge_count());
         for edge in relaxation.edge_references() {
-            messages.push(
-                relaxation
-                    .cfn()
-                    .new_zero_message(relaxation.factor_origin(edge.target())),
-            );
+            messages.push(relaxation.message_zero(relaxation.factor_origin(edge.target())));
         }
         Messages { messages }
     }
 
     // Creates a new reparametrization and initializes it with data from a given factor
     fn init_reparam(&self, relaxation: &Relaxation, factor: NodeIndex<usize>) -> MessageND {
-        relaxation
-            .cfn()
-            .new_message_clone(relaxation.factor_origin(factor))
+        relaxation.message_clone(relaxation.factor_origin(factor))
     }
 
     // Adds messages along all incoming edges to a given reparametrization
@@ -81,9 +75,9 @@ impl Messages {
     }
 
     // Alternative implementation of subtract_all_other_outgoing_messages()
+    // todo: bench performance
     // - removed nested if inside for loop, replaced with compensating addition after the loop
     // - may be faster due to avoiding if-jumps inside for-loop and vectorization of message addition
-    // todo: bench performance
     fn subtract_all_other_outgoing_messages_alt(
         &self,
         relaxation: &Relaxation,
@@ -102,9 +96,7 @@ impl Messages {
         reparam: &MessageND,
         edge: EdgeReference<'_, AlignmentIndexing, usize>,
     ) -> f64 {
-        // debug!();
-        let delta =
-            self.messages[edge.id().index()].update_with_minimization(&reparam, edge.weight());
+        let delta = self.messages[edge.id().index()].set_to_reparam_min(&reparam, edge.weight());
         self.messages[edge.id().index()].add_assign_scalar(-delta);
         delta
     }
@@ -198,7 +190,7 @@ impl Messages {
             edge.target().index()
         );
         let restricted_min = reparam_alpha.restricted_min(
-            relaxation.cfn(),
+            relaxation,
             solution,
             relaxation.factor_origin(alpha),
             relaxation.factor_origin(edge.target()),
@@ -224,22 +216,14 @@ impl Messages {
         );
 
         let mut reparam_beta = self.init_reparam(relaxation, factor);
-        debug!("reparam_beta {:?}", reparam_beta);
         self.sub_all_outgoing_messages(relaxation, &mut reparam_beta, factor);
         for in_edge in relaxation.edges_directed(factor, Incoming) {
             let alpha = relaxation.factor_origin(in_edge.source());
             let num_labeled = solution.num_labeled(relaxation.cfn().factor_variables(alpha));
-            debug!(
-                "for in_edge source {} num_labeled is {}",
-                in_edge.source().index(),
-                num_labeled
-            );
             if num_labeled > 0 && num_labeled < relaxation.cfn().arity(alpha) {
-                debug!("In partially labeled branch");
                 let restrected_message = self.send_restricted(relaxation, in_edge, solution);
                 reparam_beta.add_assign_incoming(&restrected_message);
             } else {
-                debug!("In fully (un)labeled branch");
                 reparam_beta.add_assign_incoming(&self.messages[in_edge.id().index()]);
             }
         }
@@ -318,7 +302,6 @@ mod tests {
         let cfn = construct_cfn_example_1();
         let relaxation = Relaxation::new(&cfn);
         let messages = Messages::new(&relaxation);
-
         for factor in relaxation.node_indices() {
             let reparam = messages.init_reparam(&relaxation, factor);
             let reparam_vec: Vec<f64> = reparam.iter().map(|val| *val).collect();
@@ -340,6 +323,7 @@ mod tests {
         let cfn = construct_cfn_example_1();
         let relaxation = Relaxation::new(&cfn);
         let mut messages = Messages::new(&relaxation);
+
         for message in messages.messages.iter_mut() {
             message.add_assign_scalar(1.);
         }
@@ -360,6 +344,8 @@ mod tests {
             assert_eq!(diff, vec![expected_value; expected_size]);
         }
     }
+
+    // todo: add tests for remaining functions, use the stub below
 
     // #[test]
     // fn sub_all_outgoing_messages() {
