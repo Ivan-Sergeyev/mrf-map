@@ -1,0 +1,159 @@
+Processing instance ./test_instances/example_1.uai
+UAI import complete. Elapsed time 0.194071 ms.
+Relaxation constructed. Elapsed time 0.027865 ms.
+Iteration 0. Elapsed time 0.021536ms. Current lower bound -40.
+Iteration 1. Elapsed time 0.032956ms. Current lower bound -40.
+Maximum number of iterations reached. Running the last iteration.
+Iteration 2. Elapsed time 0.043447ms. Forward cost: -40. Forward solution 2 0 4
+Iteration 2. Elapsed time 0.052562ms. Backward cost: -40. Backward solution 2 0 4 .
+Iteration 2. Elapsed time 0.055666ms. Current lower bound -40.
+SRMP finished. Elapsed time 0.057715ms. Best cost -40. Best solution --- see above.
+
+
+Processing instance ./test_instances/frustrated_cycle_3_sym.uai
+UAI import complete. Elapsed time 0.167968 ms.
+Relaxation constructed. Elapsed time 0.032368 ms.
+Iteration 0. Elapsed time 0.014441ms. Current lower bound 0.
+Iteration 1. Elapsed time 0.021822ms. Current lower bound 0.
+Maximum number of iterations reached. Running the last iteration.
+Iteration 2. Elapsed time 0.028144ms. Forward cost: 1. Forward solution 0 1 0
+Iteration 2. Elapsed time 0.033861ms. Backward cost: 1. Backward solution 0 1 0 .
+Iteration 2. Elapsed time 0.038049ms. Current lower bound 0.
+SRMP finished. Elapsed time 0.041309ms. Best cost 1. Best solution --- see above.
+
+
+Processing instance ./test_instances/frustrated_cycle_3.uai
+UAI import complete. Elapsed time 0.178858 ms.
+Relaxation constructed. Elapsed time 0.032954 ms.
+Iteration 0. Elapsed time 0.018733ms. Current lower bound 0.
+Iteration 1. Elapsed time 0.026411ms. Current lower bound 0.
+Maximum number of iterations reached. Running the last iteration.
+Iteration 2. Elapsed time 0.032756ms. Forward cost: 1. Forward solution 0 0 0
+Iteration 2. Elapsed time 0.038783ms. Backward cost: 1. Backward solution 0 0 0 .
+Iteration 2. Elapsed time 0.042985ms. Current lower bound 0.
+SRMP finished. Elapsed time 0.046028ms. Best cost 1. Best solution --- see above.
+
+
+Processing instance ./test_instances/frustrated_cycle_4.uai
+UAI import complete. Elapsed time 0.398246 ms.
+Relaxation constructed. Elapsed time 0.067162 ms.
+Iteration 0. Elapsed time 0.024352ms. Current lower bound 0.
+Iteration 1. Elapsed time 0.03655ms. Current lower bound 0.
+Maximum number of iterations reached. Running the last iteration.
+Iteration 2. Elapsed time 0.046712ms. Forward cost: 1. Forward solution 0 0 0 0
+Iteration 2. Elapsed time 0.05696ms. Backward cost: 1. Backward solution 0 0 0 0 .
+Iteration 2. Elapsed time 0.063881ms. Current lower bound 0.
+SRMP finished. Elapsed time 0.068834ms. Best cost 1. Best solution --- see above.
+
+
+Processing instance ./test_instances/frustrated_cycle_5_sym.uai
+UAI import complete. Elapsed time 0.392498 ms.
+Relaxation constructed. Elapsed time 0.057083 ms.
+Iteration 0. Elapsed time 0.023222ms. Current lower bound 0.
+Iteration 1. Elapsed time 0.035927ms. Current lower bound 0.
+Maximum number of iterations reached. Running the last iteration.
+Iteration 2. Elapsed time 0.046479ms. Forward cost: 1. Forward solution 0 1 0 1 0
+Iteration 2. Elapsed time 0.056645ms. Backward cost: 1. Backward solution 0 1 0 1 0 .
+Iteration 2. Elapsed time 0.063328ms. Current lower bound 0.
+SRMP finished. Elapsed time 0.068179ms. Best cost 1. Best solution --- see above.
+
+
+Processing instance ./test_instances/frustrated_cycle_5.uai
+UAI import complete. Elapsed time 0.288132 ms.
+Relaxation constructed. Elapsed time 0.062095 ms.
+Iteration 0. Elapsed time 0.022155ms. Current lower bound 0.
+Iteration 1. Elapsed time 0.03396ms. Current lower bound 0.
+Maximum number of iterations reached. Running the last iteration.
+Iteration 2. Elapsed time 0.043583ms. Forward cost: 1. Forward solution 0 0 0 0 0
+Iteration 2. Elapsed time 0.054089ms. Backward cost: 1. Backward solution 0 0 0 0 0 .
+Iteration 2. Elapsed time 0.061077ms. Current lower bound 0.
+SRMP finished. Elapsed time 0.065778ms. Best cost 1. Best solution --- see above.
+
+
+Processing instance ./test_instances/frustrated_tangle.uai
+UAI import complete. Elapsed time 0.297607 ms.
+Relaxation constructed. Elapsed time 0.050292 ms.
+Iteration 0. Elapsed time 0.023022ms. Current lower bound 0.
+Iteration 1. Elapsed time 0.035518ms. Current lower bound 0.
+Maximum number of iterations reached. Running the last iteration.
+Iteration 2. Elapsed time 0.045913ms. Forward cost: 1. Forward solution 0 1 2 0
+Iteration 2. Elapsed time 0.056124ms. Backward cost: 1. Backward solution 0 2 1 0 .
+Iteration 2. Elapsed time 0.06224ms. Current lower bound 0.
+SRMP finished. Elapsed time 0.066879ms. Best cost 1. Best solution --- see above.
+
+
+Processing instance ./test_instances/grid4x4.UAI.LG
+UAI import complete. Elapsed time 0.390676 ms.
+Relaxation constructed. Elapsed time 0.050353 ms.
+Iteration 0. Elapsed time 0.032752ms. Current lower bound -27433.3.
+Iteration 1. Elapsed time 0.050554ms. Current lower bound -27432.9.
+Iteration 2. Elapsed time 0.063965ms. Current lower bound -27432.7.
+Iteration 3. Elapsed time 0.075995ms. Current lower bound -27432.7.
+Iteration 4. Elapsed time 0.087575ms. Current lower bound -27432.6.
+Iteration 5. Elapsed time 0.09902ms. Current lower bound -27432.6.
+Iteration 6. Elapsed time 0.110293ms. Current lower bound -27432.6.
+Iteration 7. Elapsed time 0.12162ms. Current lower bound -27432.6.
+Iteration 8. Elapsed time 0.132537ms. Current lower bound -27432.6.
+Iteration 9. Elapsed time 0.143284ms. Current lower bound -27432.6.
+Iteration 10. Elapsed time 0.15905ms. Forward cost: -27260.8. Forward solution 1 0 1 0 1 0 0 0 0 0 0 0 1 0 1 1
+Iteration 10. Elapsed time 0.176194ms. Backward cost: -23161. Backward solution 1 1 0 1 1 0 1 1 0 0 1 0 1 0 0 1 .
+Iteration 10. Elapsed time 0.185904ms. Current lower bound -27432.6.
+Iteration 11. Elapsed time 0.196981ms. Current lower bound -27432.6.
+Iteration 12. Elapsed time 0.207076ms. Current lower bound -27432.6.
+Iteration 13. Elapsed time 0.21747ms. Current lower bound -27432.6.
+Iteration 14. Elapsed time 0.227666ms. Current lower bound -27432.6.
+Iteration 15. Elapsed time 0.253257ms. Current lower bound -27432.6.
+Iteration 16. Elapsed time 0.263522ms. Current lower bound -27432.6.
+Iteration 17. Elapsed time 0.273646ms. Current lower bound -27432.6.
+Iteration 18. Elapsed time 0.28331ms. Current lower bound -27432.6.
+Iteration 19. Elapsed time 0.293161ms. Current lower bound -27432.6.
+Iteration 20. Elapsed time 0.305401ms. Forward cost: -27260.8. Forward solution 1 0 1 0 1 0 0 0 0 0 0 0 1 0 1 1
+Iteration 20. Elapsed time 0.319363ms. Backward cost: -23161. Backward solution 1 1 0 1 1 0 1 1 0 0 1 0 1 0 0 1 .
+Iteration 20. Elapsed time 0.327892ms. Current lower bound -27432.6.
+Iteration 21. Elapsed time 0.338113ms. Current lower bound -27432.6.
+Iteration 22. Elapsed time 0.348369ms. Current lower bound -27432.6.
+Iteration 23. Elapsed time 0.358403ms. Current lower bound -27432.6.
+Iteration 24. Elapsed time 0.368589ms. Current lower bound -27432.6.
+Iteration 25. Elapsed time 0.379081ms. Current lower bound -27432.6.
+Iteration 26. Elapsed time 0.389415ms. Current lower bound -27432.6.
+Maximum number of iterations reached. Running the last iteration.
+Iteration 27. Elapsed time 0.399554ms. Forward cost: -27260.8. Forward solution 1 0 1 0 1 0 0 0 0 0 0 0 1 0 1 1
+Iteration 27. Elapsed time 0.412982ms. Backward cost: -23161. Backward solution 1 1 0 1 1 0 1 1 0 0 1 0 1 0 0 1 .
+Iteration 27. Elapsed time 0.421133ms. Current lower bound -27432.6.
+SRMP finished. Elapsed time 0.425553ms. Best cost -27260.8. Best solution --- see above.
+
+
+Processing instance ./test_instances/one_variable_inconsistent.uai
+UAI import complete. Elapsed time 0.16326 ms.
+Relaxation constructed. Elapsed time 0.00491 ms.
+Iteration 0. Elapsed time 0.010573ms. Current lower bound 1.
+Iteration 1. Elapsed time 0.017564ms. Current lower bound 1.
+Maximum number of iterations reached. Running the last iteration.
+Iteration 2. Elapsed time 0.023032ms. Forward cost: 1. Forward solution 4
+Iteration 2. Elapsed time 0.027459ms. Backward cost: 1. Backward solution 4 .
+Iteration 2. Elapsed time 0.031379ms. Current lower bound 1.
+SRMP finished. Elapsed time 0.034574ms. Best cost 1. Best solution --- see above.
+
+
+Processing instance ./test_instances/three_variable_consistent.uai
+UAI import complete. Elapsed time 0.092474 ms.
+Relaxation constructed. Elapsed time 0.016963 ms.
+Iteration 0. Elapsed time 0.006949ms. Current lower bound 0.
+Iteration 1. Elapsed time 0.011116ms. Current lower bound 0.
+Maximum number of iterations reached. Running the last iteration.
+Iteration 2. Elapsed time 0.014796ms. Forward cost: 0. Forward solution 0 0 0
+Iteration 2. Elapsed time 0.017981ms. Backward cost: 0. Backward solution 0 0 0 .
+Iteration 2. Elapsed time 0.020193ms. Current lower bound 0.
+SRMP finished. Elapsed time 0.021808ms. Best cost 0. Best solution --- see above.
+
+
+Processing instance ./test_instances/two_variable_inconsistent.uai
+UAI import complete. Elapsed time 0.051748 ms.
+Relaxation constructed. Elapsed time 0.007502 ms.
+Iteration 0. Elapsed time 0.00503ms. Current lower bound 1.
+Iteration 1. Elapsed time 0.006854ms. Current lower bound 1.
+Maximum number of iterations reached. Running the last iteration.
+Iteration 2. Elapsed time 0.008588ms. Forward cost: 1. Forward solution 1 1
+Iteration 2. Elapsed time 0.009957ms. Backward cost: 1. Backward solution 1 1 .
+Iteration 2. Elapsed time 0.010943ms. Current lower bound 1.
+SRMP finished. Elapsed time 0.011754ms. Best cost 1. Best solution --- see above.
