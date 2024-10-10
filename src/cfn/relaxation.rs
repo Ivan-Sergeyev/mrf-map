@@ -91,30 +91,21 @@ impl<'a> Relaxation<'a> {
     pub fn message_zero(&self, factor_origin: &FactorOrigin) -> MessageND {
         // todo: change argument from FactorOrigin to NodeIndex
         // todo: match on factor type, return corresponding message type
-        MessageND::zero_from_len(
-            self.cfn.get_factor(factor_origin),
-            self.cfn.function_table_len(factor_origin),
-        )
+        MessageND::zero(self.cfn, factor_origin)
     }
 
     // Creates a new infinite message corresponding to the given factor (unary or non-unary)
     pub fn message_inf(&self, factor_origin: &FactorOrigin) -> MessageND {
         // todo: change argument from FactorOrigin to NodeIndex
         // todo: match on factor type, return corresponding message type
-        MessageND::inf_from_len(
-            self.cfn.get_factor(factor_origin),
-            self.cfn.function_table_len(factor_origin),
-        )
+        MessageND::inf(&self.cfn, factor_origin)
     }
 
     // Creates a new message initialized with contents of the given factor (unary or non-unary)
     pub fn message_clone(&self, factor_origin: &FactorOrigin) -> MessageND {
         // todo: change argument from FactorOrigin to NodeIndex
         // todo: match on factor type, return corresponding message type
-        MessageND::clone_from_factor(
-            self.cfn.get_factor(factor_origin),
-            self.cfn.function_table_len(factor_origin),
-        )
+        MessageND::clone_factor(&self.cfn, factor_origin)
     }
 }
 

@@ -6,9 +6,7 @@ use std::{
 };
 
 use crate::{
-    cfn::{relaxation::Relaxation, solution::Solution},
-    factor_types::{factor_trait::Factor, factor_type::FactorType},
-    CostFunctionNetwork, FactorOrigin,
+    cfn::solution::Solution, factor_types::factor_trait::Factor, CostFunctionNetwork, FactorOrigin,
 };
 
 use super::message_trait::Message;
@@ -217,15 +215,15 @@ impl Message for MessageND {
 
     fn restricted_min(
         &self,
-        relaxation: &Relaxation,
+        cfn: &CostFunctionNetwork,
         solution: &Solution,
         alpha: &FactorOrigin,
         beta: &FactorOrigin,
     ) -> Self {
         // todo: describe implementation details
 
-        let alpha_vars = relaxation.cfn().factor_variables(alpha);
-        let beta_vars = relaxation.cfn().factor_variables(beta);
+        let alpha_vars = cfn.factor_variables(alpha);
+        let beta_vars = cfn.factor_variables(beta);
 
         let alpha_arity = alpha_vars.len();
         let beta_arity = beta_vars.len();
@@ -244,7 +242,7 @@ impl Message for MessageND {
             let mut beta_stride = 1;
             let mut beta_var_index = beta_arity - 1;
             while alpha_vars[alpha_var_index] != beta_vars[beta_var_index] {
-                beta_stride *= relaxation.cfn().domain_size(beta_vars[beta_var_index]);
+                beta_stride *= cfn.domain_size(beta_vars[beta_var_index]);
                 if beta_var_index == 0 {
                     beta_stride = 0;
                     break;
@@ -258,14 +256,14 @@ impl Message for MessageND {
             } else {
                 self_strides.push(self_stride);
                 beta_strides.push(beta_stride);
-                self_domain_sizes.push(relaxation.cfn().domain_size(alpha_vars[alpha_var_index]));
+                self_domain_sizes.push(cfn.domain_size(alpha_vars[alpha_var_index]));
                 labeling.push(0);
             }
 
-            self_stride *= relaxation.cfn().domain_size(alpha_vars[alpha_var_index]);
+            self_stride *= cfn.domain_size(alpha_vars[alpha_var_index]);
         }
 
-        let mut theta_beta: MessageND = relaxation.message_inf(beta).into();
+        let mut theta_beta = MessageND::inf(cfn, beta);
         theta_beta[beta_entry_index] = self.value[self_entry_index];
 
         let labeling_len = labeling.len();
@@ -386,24 +384,24 @@ impl IndexMut<usize> for MessageND {
 
 // todo: match on factortype, return corresponding messagetype, individual implementations
 impl MessageND {
-    pub fn zero_from_len(_factor: Option<&FactorType>, len: usize) -> Self {
+    pub fn zero(cfn: &CostFunctionNetwork, factor_origin: &FactorOrigin) -> Self {
         MessageND {
-            value: vec![0.; len],
+            value: vec![0.; cfn.function_table_len(factor_origin)],
         }
     }
 
-    pub fn inf_from_len(_factor: Option<&FactorType>, len: usize) -> Self {
+    pub fn inf(cfn: &CostFunctionNetwork, factor_origin: &FactorOrigin) -> Self {
         MessageND {
-            value: vec![f64::INFINITY; len],
+            value: vec![f64::INFINITY; cfn.function_table_len(factor_origin)],
         }
     }
 
-    pub fn clone_from_factor(factor: Option<&FactorType>, len: usize) -> Self {
-        match factor {
+    pub fn clone_factor(cfn: &CostFunctionNetwork, factor_origin: &FactorOrigin) -> Self {
+        match cfn.get_factor(factor_origin) {
             Some(factor) => MessageND {
                 value: factor.clone_function_table(),
             },
-            None => MessageND::zero_from_len(factor, len),
+            None => MessageND::zero(cfn, factor_origin),
         }
     }
 }
@@ -411,8 +409,8 @@ impl MessageND {
 #[cfg(test)]
 mod tests {
     use crate::{
-        cfn::{relaxation::ConstructRelaxation, uai::UAI},
-        factor_types::function_table::FunctionTable,
+        cfn::uai::UAI,
+        factor_types::{factor_type::FactorType, function_table::FunctionTable},
     };
 
     use super::*;
@@ -455,7 +453,6 @@ mod tests {
             "test_instances/frustrated_cycle_5_sym.uai".into(),
             false,
         );
-        let relaxation = Relaxation::new(&cfn);
 
         let alpha = FactorOrigin::NonUnaryFactor(1);
         let beta = FactorOrigin::Variable(2);
@@ -464,7 +461,7 @@ mod tests {
             value: vec![3., 4., 0., 1.],
         };
 
-        let restricted_min = message.restricted_min(&relaxation, &solution, &alpha, &beta);
+        let restricted_min = message.restricted_min(&cfn, &solution, &alpha, &beta);
         let expected = MessageND {
             value: vec![0., 1.],
         };

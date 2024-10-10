@@ -5,10 +5,7 @@ use std::{
     slice::{Iter, IterMut},
 };
 
-use crate::{
-    cfn::{relaxation::Relaxation, solution::Solution},
-    CostFunctionNetwork, FactorOrigin,
-};
+use crate::{cfn::solution::Solution, CostFunctionNetwork, FactorOrigin};
 
 // Interface for messages
 // Note: reparametrizations are stored as messages, as every reparametrization can be treated as an initial message,
@@ -75,7 +72,7 @@ pub trait Message: Index<usize> + IndexMut<usize> {
     // Assumption: `self` is a message from `alpha` to `beta`
     fn restricted_min(
         &self,
-        relaxation: &Relaxation,
+        cfn: &CostFunctionNetwork,
         solution: &Solution,
         alpha: &FactorOrigin,
         beta: &FactorOrigin,

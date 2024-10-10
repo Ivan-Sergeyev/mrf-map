@@ -4,11 +4,9 @@ This project implements solvers for cost function networks
 
 ## Usage
 
-Prerequisites:
-- Install `rustc` and `cargo`, for example, by following [this tutorial](https://www.rust-lang.org/tools/install)
-
-- Testing: `cargo test`
+- Prerequisites: Install `rustc` and `cargo`, for example, by following [this tutorial](https://www.rust-lang.org/tools/install)
 - Running: `cargo run -r`
+- Testing: `cargo test -r`
 
 ## References
 

@@ -19,6 +19,7 @@ use super::factor_trait::Factor;
 // Stores a Potts factor
 pub struct Potts {
     variables: Vec<usize>,        // the two variables associated with this factor
+    function_table_len: usize,    // the length of the function table that this factor expands to
     domain_sizes: (usize, usize), // the domain sizes of this factor's variables
     value: f64, // the value of the Potts factor whenever the labels of this factor's variables match
 }
@@ -33,6 +34,7 @@ impl Potts {
         let domain_sizes = (cfn.domain_size(variables[0]), cfn.domain_size(variables[1]));
         Potts {
             variables,
+            function_table_len: domain_sizes.0 * domain_sizes.1,
             domain_sizes,
             value,
         }
@@ -45,7 +47,7 @@ impl Factor for Potts {
     }
 
     fn function_table_len(&self) -> usize {
-        self.domain_sizes.0 * self.domain_sizes.1
+        self.function_table_len
     }
 
     fn variables(&self) -> &Vec<usize> {
@@ -62,6 +64,7 @@ impl Factor for Potts {
     fn map(&self, mapping: fn(f64) -> f64) -> Potts {
         Potts {
             variables: self.variables.clone(),
+            function_table_len: self.function_table_len,
             domain_sizes: self.domain_sizes.clone(),
             value: mapping(self.value),
         }

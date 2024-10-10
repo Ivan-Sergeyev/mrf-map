@@ -58,8 +58,8 @@ pub struct NodeEdgeAttrs {
     edge_is_backward: BitVec<usize, LocalBits>, // is_bw from cpp // todo: better desc
     edge_is_update_lb: BitVec<usize, LocalBits>, // if the lower bound is updated via the edge in the backward pass
     node_is_update_lb: BitVec<usize, LocalBits>, // if the lower bound is updated via the node in the backward pass
-    node_weight_forward: Vec<usize>,             // weight_forward from cpp // todo: better desc
-    node_weight_backward: Vec<usize>,            // weight_backward from cpp // todo: better desc
+    node_omega_forward: Vec<f64>, // the scaling factor for the reparametrization update in the forward pass
+    node_omega_backward: Vec<f64>, // the scaling factor for the reparametrization update in the backward pass
     node_weight_update_lb: Vec<usize>, // weight for updating the lower bound in the backward pass
 }
 
@@ -71,8 +71,8 @@ impl NodeEdgeAttrs {
             edge_is_backward: BitVec::repeat(false, num_edges),
             edge_is_update_lb: BitVec::repeat(false, num_edges),
             node_is_update_lb: BitVec::repeat(false, num_nodes),
-            node_weight_forward: vec![0; num_nodes],
-            node_weight_backward: vec![0; num_nodes],
+            node_omega_forward: vec![0.; num_nodes],
+            node_omega_backward: vec![0.; num_nodes],
             node_weight_update_lb: vec![0; num_nodes],
         }
     }
@@ -140,26 +140,27 @@ impl NodeEdgeAttrs {
             }
 
             // Compute node weight in forward direction
-            attrs.node_weight_forward[alpha] =
+            let mut alpha_weight_forward =
                 max(weight_in_total - weight_in_forward, weight_in_forward) + weight_out_dir[0];
-            if attrs.node_weight_forward[alpha] + weight_in_forward == 0 {
-                attrs.node_weight_forward[alpha] = 1;
+            if alpha_weight_forward + weight_in_forward == 0 {
+                alpha_weight_forward = 1;
             }
 
             // Compute node weight in backward direction
-            attrs.node_weight_backward[alpha] =
+            let mut alpha_weight_backward =
                 max(weight_in_total - weight_in_backward, weight_in_backward) + weight_out_dir[1];
-            if attrs.node_weight_backward[alpha] + weight_in_backward == 0 {
-                attrs.node_weight_backward[alpha] = 1;
+            if alpha_weight_backward + weight_in_backward == 0 {
+                alpha_weight_backward = 1;
             }
 
-            // Compute flag and node weight for lower bound updates
-            let new_is_update_lb =
-                attrs.node_is_update_lb[alpha] && attrs.node_weight_backward[alpha] > 0;
-            attrs.node_is_update_lb.set(alpha, new_is_update_lb);
+            // Compute scaling factors for reparametrization updates
+            attrs.node_omega_forward[alpha] = 1. / alpha_weight_forward as f64;
+            attrs.node_omega_backward[alpha] = 1. / alpha_weight_backward as f64;
 
-            attrs.node_weight_update_lb[alpha] =
-                attrs.node_weight_backward[alpha] - weight_in_backward;
+            // Compute flag and node weight for lower bound updates
+            let new_is_update_lb = attrs.node_is_update_lb[alpha] && alpha_weight_backward > 0;
+            attrs.node_is_update_lb.set(alpha, new_is_update_lb);
+            attrs.node_weight_update_lb[alpha] = alpha_weight_backward - weight_in_backward;
         }
 
         attrs
@@ -225,9 +226,7 @@ impl<'a> SRMP<'a> {
             let mut reparam = self.messages.compute_reparam(self.relaxation, *factor);
 
             // Line 6 of SRMP pseudocode: update messages along incoming "forward" edges
-            reparam.mul_assign_scalar(
-                1. / self.node_edge_attrs.node_weight_forward[factor.index()] as f64,
-            );
+            reparam.mul_assign_scalar(self.node_edge_attrs.node_omega_forward[factor.index()]);
             for in_edge in self
                 .relaxation
                 .edges_directed(*factor, Incoming)
@@ -268,9 +267,7 @@ impl<'a> SRMP<'a> {
             let mut reparam = self.messages.compute_reparam(self.relaxation, *factor);
 
             // Line 6 of SRMP pseudocode: update messages along incoming "backward" edges
-            reparam.mul_assign_scalar(
-                1. / self.node_edge_attrs.node_weight_backward[factor.index()] as f64,
-            );
+            reparam.mul_assign_scalar(self.node_edge_attrs.node_omega_backward[factor.index()]);
             for in_edge in self
                 .relaxation
                 .edges_directed(*factor, Incoming)

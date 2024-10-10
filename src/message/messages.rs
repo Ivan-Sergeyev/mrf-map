@@ -190,7 +190,7 @@ impl Messages {
             edge.target().index()
         );
         let restricted_min = reparam_alpha.restricted_min(
-            relaxation,
+            relaxation.cfn(),
             solution,
             relaxation.factor_origin(alpha),
             relaxation.factor_origin(edge.target()),
