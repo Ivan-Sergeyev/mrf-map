@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::{
+    borrow::Cow,
     fmt::Debug,
     fs::OpenOptions,
     io::{self, BufRead, BufReader, Write},
@@ -14,7 +15,7 @@ use log::{debug, warn};
 
 use crate::{
     cfn::uai::{string_to_vec, vec_to_string},
-    factor_types::{factor_trait::Factor, factor_type::FactorType, function_table::FunctionTable},
+    factors::{factor_trait::Factor, factor_type::FactorType, function_table::FunctionTable},
 };
 
 use crate::cfn::uai::UAIState;
@@ -33,8 +34,7 @@ pub enum FactorOrigin {
 // Stores information about a variable in the cost function network
 #[derive(Debug)]
 pub struct Variable {
-    variable_vec: Vec<usize>, // a one-element vector containing the variable's index
-    domain_size: usize,       // the size of the domain of this variable
+    domain_size: usize,          // the size of the domain of this variable
     factor_index: Option<usize>, // the index of the corresponding unary factor in `factors` (if it exits)
 }
 
@@ -72,9 +72,7 @@ impl CostFunctionNetwork {
     ) -> Self {
         let variables = domain_sizes
             .iter()
-            .enumerate()
-            .map(|(variable_index, domain_size)| Variable {
-                variable_vec: vec![variable_index],
+            .map(|domain_size| Variable {
                 domain_size: *domain_size,
                 factor_index: None,
             })
@@ -163,10 +161,12 @@ impl CostFunctionNetwork {
     }
 
     // Returns a reference to the Vec of variables associated with a given factor
-    pub fn factor_variables(&self, factor_origin: &FactorOrigin) -> &Vec<usize> {
+    pub fn factor_variables(&self, factor_origin: &FactorOrigin) -> Cow<Vec<usize>> {
         match factor_origin {
-            FactorOrigin::Variable(variable_index) => &self.variables[*variable_index].variable_vec,
-            FactorOrigin::NonUnaryFactor(factor_index) => self.factors[*factor_index].variables(),
+            FactorOrigin::Variable(variable_index) => Cow::Owned(vec![*variable_index]),
+            FactorOrigin::NonUnaryFactor(factor_index) => {
+                Cow::Borrowed(self.factors[*factor_index].variables())
+            }
         }
     }
 
@@ -192,7 +192,7 @@ impl CostFunctionNetwork {
         let beta_variables = self.factor_variables(beta);
         let mut difference = Vec::with_capacity(alpha_variables.len() - beta_variables.len());
         let mut var_b_iter = beta_variables.iter().peekable();
-        for &var_a in alpha_variables {
+        for &var_a in alpha_variables.iter() {
             if var_b_iter.peek().is_some_and(|var_b| **var_b == var_a) {
                 var_b_iter.next();
             } else {
@@ -200,14 +200,6 @@ impl CostFunctionNetwork {
             }
         }
         difference
-    }
-
-    // Applies a mapping to all factors
-    pub fn map_factors_inplace(&mut self, mapping: fn(&mut f64)) -> &mut Self {
-        self.factors
-            .iter_mut()
-            .for_each(|factor| factor.map_inplace(mapping));
-        self
     }
 
     // Returns the number of variables in the cost function network

@@ -1,33 +1,23 @@
 #![allow(dead_code)]
 
+use std::marker::{self, PhantomData};
+
 use log::debug;
-use petgraph::graph::{
-    DiGraph, EdgeIndex, EdgeReferences, Edges, Neighbors, NodeIndex, NodeIndices,
-};
+use petgraph::graph::{DiGraph, EdgeReferences, Edges, Neighbors, NodeIndex, NodeIndices};
 use petgraph::Directed;
 use petgraph::Direction::{self};
 
-use crate::factor_types::factor_trait::Factor;
-use crate::message::message_nd::{AlignmentIndexing, MessageND};
+use crate::factors::factor_trait::Factor;
 use crate::{CostFunctionNetwork, FactorOrigin};
 
-type RNodeData = FactorOrigin;
-type REdgeData = AlignmentIndexing;
-pub type RelaxationGraph = DiGraph<RNodeData, REdgeData, usize>;
-
 pub struct Relaxation<'a> {
-    cfn: &'a CostFunctionNetwork,
-    graph: RelaxationGraph,
+    graph: DiGraph<FactorOrigin, (), usize>,
+    cfn: marker::PhantomData<&'a CostFunctionNetwork>,
 }
 
 impl<'a> Relaxation<'a> {
-    // Returns a reference to the cost function network associated with this relaxation
-    pub fn cfn(&self) -> &CostFunctionNetwork {
-        self.cfn
-    }
-
     // Returns an iterator over all edges of the relaxation graph
-    pub fn edge_references(&self) -> EdgeReferences<AlignmentIndexing, usize> {
+    pub fn edge_references(&self) -> EdgeReferences<(), usize> {
         self.graph.edge_references()
     }
 
@@ -47,38 +37,34 @@ impl<'a> Relaxation<'a> {
     }
 
     // Returns the factor origin of the given node in the relaxation graph
-    pub fn factor_origin(&self, node: NodeIndex<usize>) -> &RNodeData {
+    pub fn factor_origin(&self, node: NodeIndex<usize>) -> &FactorOrigin {
         self.graph.node_weight(node).unwrap()
     }
 
     // Checks if the factor corresponding to the given node in the relaxation graph is unary
     pub fn is_unary_factor(&self, node: NodeIndex<usize>) -> bool {
         match self.factor_origin(node) {
-            RNodeData::Variable(_) => true,
-            RNodeData::NonUnaryFactor(_) => false,
+            FactorOrigin::Variable(_) => true,
+            FactorOrigin::NonUnaryFactor(_) => false,
         }
     }
 
-    // Returns the data associated with the given edge in the relaxation graph
-    pub fn edge_data(&self, edge: EdgeIndex<usize>) -> &REdgeData {
-        self.graph.edge_weight(edge).unwrap()
-    }
+    // // Returns the data associated with the given edge in the relaxation graph
+    // pub fn edge_data(&self, edge: EdgeIndex<usize>) -> &() {
+    //     self.graph.edge_weight(edge).unwrap()
+    // }
 
     // Returns an iterator over all edges incident to the given node in the relaxation graph pointing in the given direction
     pub fn edges_directed(
         &self,
         node: NodeIndex<usize>,
         direction: Direction,
-    ) -> Edges<'_, REdgeData, Directed, usize> {
+    ) -> Edges<'_, (), Directed, usize> {
         self.graph.edges_directed(node, direction)
     }
 
     // Returns an iterator over the neighbors of the given node in the relaxation graph
-    pub fn neighbors(
-        &self,
-        node: NodeIndex<usize>,
-        direction: Direction,
-    ) -> Neighbors<REdgeData, usize> {
+    pub fn neighbors(&self, node: NodeIndex<usize>, direction: Direction) -> Neighbors<(), usize> {
         self.graph.neighbors_directed(node, direction)
     }
 
@@ -87,26 +73,38 @@ impl<'a> Relaxation<'a> {
         self.neighbors(node, direction).next().is_some()
     }
 
-    // Creates a new zero message corresponding to the given factor (unary or non-unary)
-    pub fn message_zero(&self, factor_origin: &FactorOrigin) -> MessageND {
-        // todo: change argument from FactorOrigin to NodeIndex
-        // todo: match on factor type, return corresponding message type
-        MessageND::zero(self.cfn, factor_origin)
-    }
+    // // Creates a new zero message corresponding to the given factor (unary or non-unary)
+    // pub fn message_zero(
+    //     &self,
+    //     cfn: &CostFunctionNetwork,
+    //     factor_origin: &FactorOrigin,
+    // ) -> MessageND {
+    //     // todo: change argument from FactorOrigin to NodeIndex
+    //     // todo: match on factor type, return corresponding message type
+    //     MessageND::zero(&cfn, factor_origin)
+    // }
 
-    // Creates a new infinite message corresponding to the given factor (unary or non-unary)
-    pub fn message_inf(&self, factor_origin: &FactorOrigin) -> MessageND {
-        // todo: change argument from FactorOrigin to NodeIndex
-        // todo: match on factor type, return corresponding message type
-        MessageND::inf(&self.cfn, factor_origin)
-    }
+    // // Creates a new infinite message corresponding to the given factor (unary or non-unary)
+    // pub fn message_inf(
+    //     &self,
+    //     cfn: &CostFunctionNetwork,
+    //     factor_origin: &FactorOrigin,
+    // ) -> MessageND {
+    //     // todo: change argument from FactorOrigin to NodeIndex
+    //     // todo: match on factor type, return corresponding message type
+    //     MessageND::inf(&cfn, factor_origin)
+    // }
 
-    // Creates a new message initialized with contents of the given factor (unary or non-unary)
-    pub fn message_clone(&self, factor_origin: &FactorOrigin) -> MessageND {
-        // todo: change argument from FactorOrigin to NodeIndex
-        // todo: match on factor type, return corresponding message type
-        MessageND::clone_factor(&self.cfn, factor_origin)
-    }
+    // // Creates a new message initialized with contents of the given factor (unary or non-unary)
+    // pub fn message_clone(
+    //     &self,
+    //     cfn: &CostFunctionNetwork,
+    //     factor_origin: &FactorOrigin,
+    // ) -> MessageND {
+    //     // todo: change argument from FactorOrigin to NodeIndex
+    //     // todo: match on factor type, return corresponding message type
+    //     MessageND::clone_factor(&cfn, factor_origin)
+    // }
 }
 
 // Trait for defining relaxation types
@@ -155,7 +153,7 @@ impl<'a> ConstructRelaxation<'a, MinimalEdges> for Relaxation<'a> {
 
         // Add nodes corresponding to original variables
         for variable in 0..cfn.num_variables() {
-            unary_nodes.push(graph.add_node(RNodeData::Variable(variable)));
+            unary_nodes.push(graph.add_node(FactorOrigin::Variable(variable)));
             debug!("Added variable {} as node {}.", { variable }, {
                 unary_nodes[variable].index()
             });
@@ -168,7 +166,7 @@ impl<'a> ConstructRelaxation<'a, MinimalEdges> for Relaxation<'a> {
             .filter(|(_factor_index, factor)| factor.arity() >= 2)
         {
             // Add a node corresponding to this factor
-            non_unary_nodes.push(graph.add_node(RNodeData::NonUnaryFactor(factor_index)));
+            non_unary_nodes.push(graph.add_node(FactorOrigin::NonUnaryFactor(factor_index)));
             let new_node = non_unary_nodes.last().unwrap();
             debug!("Added non-unary factor {} as node {}.", { factor_index }, {
                 new_node.index()
@@ -182,16 +180,16 @@ impl<'a> ConstructRelaxation<'a, MinimalEdges> for Relaxation<'a> {
                     new_node.index(),
                     variable_node.index()
                 );
-                let alpha = RNodeData::NonUnaryFactor(factor_index);
-                let beta = RNodeData::Variable(*variable);
-                let weight = REdgeData::new(&cfn, &alpha, &beta);
-                graph.add_edge(*new_node, variable_node, weight);
+                graph.add_edge(*new_node, variable_node, ());
             }
         }
 
         debug!("Finished constructing MinimalEdges relaxation.");
 
-        Relaxation { cfn, graph }
+        Relaxation {
+            graph,
+            cfn: PhantomData,
+        }
     }
 }
 

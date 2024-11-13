@@ -5,7 +5,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use crate::{factor_types::factor_trait::Factor, CostFunctionNetwork};
+use crate::{factors::factor_trait::Factor, CostFunctionNetwork};
 
 use super::uai::option_to_string;
 

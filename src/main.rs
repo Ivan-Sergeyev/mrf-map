@@ -2,7 +2,7 @@ mod data_structures {
     pub mod jagged_arrays;
 }
 
-mod factor_types {
+mod factors {
     pub mod factor_trait;
     pub mod factor_type;
     pub mod function_table;
@@ -10,18 +10,22 @@ mod factor_types {
     pub mod uniform_constant;
 }
 
-mod message {
+mod messages {
     pub mod message_nd;
     pub mod message_trait;
-    pub mod messages;
+}
+
+mod alg {
+    pub mod solver;
+    pub mod srmp;
+    pub mod srmp_new;
 }
 
 mod cfn {
     pub mod cost_function_network;
+    pub mod factor_sequence;
     pub mod relaxation;
     pub mod solution;
-    pub mod solver;
-    pub mod srmp;
     pub mod uai;
 }
 
@@ -32,11 +36,13 @@ mod csp {
 
 use std::time::Instant;
 
+use alg::{
+    solver::{Solver, SolverOptions},
+    srmp::SRMP,
+};
 use cfn::{
     cost_function_network::*,
     relaxation::{ConstructRelaxation, Relaxation},
-    solver::{Solver, SolverOptions},
-    srmp::SRMP,
     uai::UAI,
 };
 use log::info;
@@ -72,7 +78,7 @@ fn main() {
             time_start.elapsed()
         );
 
-        let srmp = SRMP::init(&relaxation);
+        let srmp = SRMP::init(&cfn, &relaxation);
         let options = SolverOptions::default();
         srmp.run(&options);
 

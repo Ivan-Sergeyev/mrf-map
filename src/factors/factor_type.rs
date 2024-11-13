@@ -4,7 +4,10 @@ use std::{fmt::Display, fs::File, io};
 
 use crate::{cfn::solution::Solution, CostFunctionNetwork};
 
-use super::{factor_trait::Factor, function_table::FunctionTable, potts::Potts, uniform_constant::UniformConstant};
+use super::{
+    factor_trait::Factor, function_table::FunctionTable, potts::Potts,
+    uniform_constant::UniformConstant,
+};
 
 // Enumerates all supported factor types
 pub enum FactorType {

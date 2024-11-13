@@ -2,20 +2,20 @@
 
 use crate::data_structures::jagged_arrays::{JaggedArray2, JaggedBitArray2};
 
-/// A data structure for working with binary constraint satisfaction problems
-///
-/// convention for storing constraints: 1 = consistent, 0 = inconsistent, None (binary only) = no constraint = consistent
-///
-/// unary constraints are indexed by variable, then label
-///
-/// binary constraints are indexed by two variables (var_x, var_y) in upper-triangular fashion:
-/// * var_x == var_y is impossible (because not binary),
-/// * var_x > var_y is swapped to ensure var_x <= var_y (because order doesn't matter),
-/// * var_y is replaced by var_y - var_x - 1, because all previous entries (with var_y' <= var_x) do not exist
-///
-/// todo: rewrite using BitVec instead of CompressedBitTable
-/// todo: avoid flipping variable order when accessing binary constraints?
-/// -- re-implement using Rc/Box?
+// A data structure for working with binary constraint satisfaction problems
+//
+// convention for storing constraints: 1 = consistent, 0 = inconsistent, None (binary only) = no constraint = consistent
+//
+// unary constraints are indexed by variable, then label
+//
+// binary constraints are indexed by two variables (var_x, var_y) in upper-triangular fashion:
+// * var_x == var_y is impossible (because not binary),
+// * var_x > var_y is swapped to ensure var_x <= var_y (because order doesn't matter),
+// * var_y is replaced by var_y - var_x - 1, because all previous entries (with var_y' <= var_x) do not exist
+//
+// todo: rewrite using BitVec instead of CompressedBitTable
+// todo: avoid flipping variable order when accessing binary constraints?
+// -- re-implement using Rc/Box?
 pub struct BinaryCSP {
     unary_constraints: JaggedBitArray2,
     binary_constraints: JaggedArray2<Option<JaggedBitArray2>>,

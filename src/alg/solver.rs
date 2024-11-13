@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::cfn::relaxation::Relaxation;
+use crate::{cfn::relaxation::Relaxation, CostFunctionNetwork};
 
 // Stores options to a cost function network solver
 pub struct SolverOptions {
@@ -72,7 +72,7 @@ impl SolverOptions {
 // Interface for cost function network solvers
 pub trait Solver<'a> {
     // Initializes the solver with the given relaxation
-    fn init(relaxation: &'a Relaxation) -> Self;
+    fn init(cfn: &'a CostFunctionNetwork, relaxation: &'a Relaxation) -> Self;
 
     // Executes the solver with the given options
     fn run(self, options: &SolverOptions) -> Self;

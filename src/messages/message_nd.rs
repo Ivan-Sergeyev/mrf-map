@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    cfn::solution::Solution, factor_types::factor_trait::Factor, CostFunctionNetwork, FactorOrigin,
+    cfn::solution::Solution, factors::factor_trait::Factor, CostFunctionNetwork, FactorOrigin,
 };
 
 use super::message_trait::Message;
@@ -103,8 +103,8 @@ impl AlignmentIndexing {
         let diff_ft_len = alpha_ft_len / beta_ft_len;
 
         AlignmentIndexing {
-            index_first: Self::compute_indexing(cfn, alpha_vars, beta_vars, beta_ft_len),
-            index_second: Self::compute_indexing(cfn, alpha_vars, &diff_vars, diff_ft_len),
+            index_first: Self::compute_indexing(cfn, &alpha_vars, &beta_vars, beta_ft_len),
+            index_second: Self::compute_indexing(cfn, &alpha_vars, &diff_vars, diff_ft_len),
         }
     }
 }
@@ -410,7 +410,7 @@ impl MessageND {
 mod tests {
     use crate::{
         cfn::uai::UAI,
-        factor_types::{factor_type::FactorType, function_table::FunctionTable},
+        factors::{factor_type::FactorType, function_table::FunctionTable},
     };
 
     use super::*;
